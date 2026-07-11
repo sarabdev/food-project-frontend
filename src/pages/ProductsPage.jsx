@@ -16,6 +16,7 @@ export function ProductsPage() {
   const [products, setProducts] = useState([]);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyProduct);
+  const [imageFile, setImageFile] = useState(null);
   const [error, setError] = useState("");
   const { can } = useAuth();
 
@@ -25,16 +26,24 @@ export function ProductsPage() {
   function open(product = null) {
     setEditing(product);
     setForm(product ? { ...product } : emptyProduct);
+    setImageFile(null);
     setError("");
   }
 
   async function save(event) {
     event.preventDefault();
     try {
-      if (editing) await api.put(`/products/${editing.id}`, form);
-      else await api.post("/products", form);
+      const payload = new FormData();
+      Object.entries(form).forEach(([key, value]) => {
+        payload.append(key, value ?? "");
+      });
+      if (imageFile) payload.append("image", imageFile);
+
+      if (editing) await api.put(`/products/${editing.id}`, payload);
+      else await api.post("/products", payload);
       setEditing(null);
       setForm(emptyProduct);
+      setImageFile(null);
       document.getElementById("product-modal-close")?.click();
       load();
     } catch (requestError) {
@@ -76,7 +85,12 @@ export function ProductsPage() {
             <Field label="Product name"><input className="field" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
             <Field label="SKU"><input className="field" value={form.sku || ""} onChange={(e) => setForm({ ...form, sku: e.target.value })} /></Field>
             <Field label="HS code"><input className="field" value={form.hs_code || ""} onChange={(e) => setForm({ ...form, hs_code: e.target.value })} /></Field>
-            <Field label="Package type"><input className="field" value={form.package_type} onChange={(e) => setForm({ ...form, package_type: e.target.value })} /></Field>
+            <Field label="Package type">
+              <select className="field" value={form.package_type || "Carton"} onChange={(e) => setForm({ ...form, package_type: e.target.value })}>
+                <option value="Carton">Carton</option>
+                <option value="Jar">Jar</option>
+              </select>
+            </Field>
             <NumberField label="Units per carton" field="units_per_carton" form={form} setForm={setForm} />
             <NumberField label="Pieces per unit" field="pieces_per_unit" form={form} setForm={setForm} />
             <NumberField label="Unit weight (grams)" field="unit_weight_grams" form={form} setForm={setForm} />
@@ -84,7 +98,15 @@ export function ProductsPage() {
             <NumberField label="Gross weight/carton (kg)" field="gross_weight_per_carton" form={form} setForm={setForm} />
             <NumberField label="Client price/carton" field="default_client_price" form={form} setForm={setForm} />
             <NumberField label="Customs price/kg" field="default_customs_price_per_kg" form={form} setForm={setForm} />
-            <Field label="Image URL"><input className="field" value={form.image_url || ""} onChange={(e) => setForm({ ...form, image_url: e.target.value })} /></Field>
+            <Field label="Product image">
+              <input
+                className="field"
+                type="file"
+                accept="image/*"
+                onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+              />
+              {form.image_url && !imageFile && <div className="mt-1 text-xs text-slate-400">Current image will be kept unless you choose a new one.</div>}
+            </Field>
             <div className="md:col-span-2"><Field label="Print description"><textarea className="field min-h-24" value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field></div>
           </div>
           {error && <div className="mt-5 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}
@@ -102,4 +124,3 @@ function Field({ label, children }) {
 function NumberField({ label, field, form, setForm }) {
   return <Field label={label}><input className="field" type="number" min="0" step="0.001" value={form[field]} onChange={(e) => setForm({ ...form, [field]: e.target.value })} /></Field>;
 }
-

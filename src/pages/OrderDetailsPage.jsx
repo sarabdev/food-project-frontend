@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Edit3, FileText, Printer } from "lucide-react";
+import { Edit3, FileText, Printer, Save, Truck } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { Modal } from "../components/Modal";
-import { api } from "../lib/api";
+import { api, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
 const documents = [
@@ -43,14 +43,33 @@ const company = {
   ]
 };
 
+const emptyGatePass = {
+  clearing_agent_id: "",
+  transporter_name: "",
+  transporter_contact: "",
+  transporter_phone: "",
+  truck_number: "",
+  driver_name: "",
+  driver_phone: "",
+  loading_address: "Z.A Food Industries, Marzi Pura, Narwala Road, Faisalabad",
+  delivery_address: "Karachi - Pakistan",
+  seal_numbers: ""
+};
+
 export function OrderDetailsPage() {
   const { id } = useParams();
   const [order, setOrder] = useState(null);
+  const [parties, setParties] = useState([]);
   const [preview, setPreview] = useState(null);
+  const [gatePassOpen, setGatePassOpen] = useState(false);
+  const [gatePassForm, setGatePassForm] = useState(emptyGatePass);
+  const [gatePassError, setGatePassError] = useState("");
+  const [gatePassSaving, setGatePassSaving] = useState(false);
   const { can } = useAuth();
 
   useEffect(() => {
     api.get(`/orders/${id}`).then(({ data }) => setOrder(data.order));
+    api.get("/parties").then(({ data }) => setParties(data.parties));
   }, [id]);
 
   const totals = useMemo(() => order?.items.reduce((sum, item) => ({
@@ -63,10 +82,37 @@ export function OrderDetailsPage() {
 
   if (!order) return <div className="py-20 text-center text-slate-400">Loading order...</div>;
   const canEditOrder = can("orders.edit") && !["shipped", "completed", "cancelled"].includes(order.status);
+  const clearingAgents = parties.filter((party) => party.party_type === "clearing_agent");
+  const hasGatePassInfo = Boolean(order.truck_number || order.driver_name || order.driver_phone || order.transporter_name || order.transporter_contact || order.transporter_phone || order.clearing_agent_id || sealList(order.seal_numbers).length);
 
   async function openPreview(document) {
     setPreview(document);
     await api.post(`/orders/${id}/document-audit`, { document_type: document[0], action_name: "previewed" });
+  }
+
+  function openGatePassForm() {
+    setGatePassForm(toGatePassForm(order));
+    setGatePassError("");
+    setGatePassOpen(true);
+  }
+
+  async function saveGatePass(event) {
+    event.preventDefault();
+    setGatePassSaving(true);
+    setGatePassError("");
+    try {
+      await api.patch(`/orders/${id}/gate-pass`, {
+        ...gatePassForm,
+        seal_numbers: gatePassForm.seal_numbers.split(/\r?\n|,/).map((seal) => seal.trim()).filter(Boolean)
+      });
+      const { data } = await api.get(`/orders/${id}`);
+      setOrder(data.order);
+      setGatePassOpen(false);
+    } catch (requestError) {
+      setGatePassError(messageFromError(requestError));
+    } finally {
+      setGatePassSaving(false);
+    }
   }
 
   async function printDocument() {
@@ -122,6 +168,20 @@ export function OrderDetailsPage() {
               </table>
             </div>
           </section>
+          {canEditOrder && (
+            <section className="panel flex flex-wrap items-center justify-between gap-4 p-5 md:p-6">
+              <div className="flex items-start gap-4">
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-forest-50 text-forest-700"><Truck size={20} /></div>
+                <div>
+                  <h2 className="font-bold">Gate pass info</h2>
+                  <p className="mt-1 text-sm text-slate-500">{hasGatePassInfo ? "Vehicle, driver and seal details are filled for this order." : "Add vehicle, driver and seal details for this order."}</p>
+                </div>
+              </div>
+              <button type="button" onClick={openGatePassForm} className="btn-secondary">
+                <Truck size={18} /> {hasGatePassInfo ? "Update gate pass info" : "Fill gate pass info"}
+              </button>
+            </section>
+          )}
           <section>
             <h2 className="mb-4 text-lg font-bold">Documents</h2>
             <div className="grid gap-4 md:grid-cols-2">
@@ -141,7 +201,7 @@ export function OrderDetailsPage() {
       </div>
       <Modal open={Boolean(preview)} title={preview?.[1]} onClose={() => setPreview(null)} wide>
         {preview?.[0] === "sale_contract" ? (
-          <SalesContractDocument order={order} totals={totals} />
+          <SalesContractDocument order={order} />
         ) : preview?.[0] === "customs_packing_list" || preview?.[0] === "client_packing_list" ? (
           <PackingWeightListDocument order={order} documentType={preview[0]} />
         ) : preview?.[0] === "customs_commercial_invoice" || preview?.[0] === "client_commercial_invoice" ? (
@@ -157,8 +217,50 @@ export function OrderDetailsPage() {
         )}
         <div className="no-print mt-5 flex justify-end"><button onClick={printDocument} className="btn-primary"><Printer size={18} /> Print document</button></div>
       </Modal>
+      <Modal open={gatePassOpen} title="Gate pass info" onClose={() => setGatePassOpen(false)} wide>
+        <form onSubmit={saveGatePass}>
+          <div className="grid gap-5 md:grid-cols-2">
+            <SelectField label="Clearing agent" value={gatePassForm.clearing_agent_id} onChange={(value) => setGatePassForm({ ...gatePassForm, clearing_agent_id: value })} options={clearingAgents} />
+            <div className="md:col-span-2">
+              <h3 className="mb-3 text-sm font-bold text-ink">Transporter details</h3>
+              <div className="grid gap-5 md:grid-cols-3">
+                <TextField label="Transporter name" value={gatePassForm.transporter_name} onChange={(value) => setGatePassForm({ ...gatePassForm, transporter_name: value })} />
+                <TextField label="Contact person" value={gatePassForm.transporter_contact} onChange={(value) => setGatePassForm({ ...gatePassForm, transporter_contact: value })} />
+                <TextField label="Transporter phone" value={gatePassForm.transporter_phone} onChange={(value) => setGatePassForm({ ...gatePassForm, transporter_phone: value })} />
+              </div>
+            </div>
+            <TextField label="Truck no." value={gatePassForm.truck_number} onChange={(value) => setGatePassForm({ ...gatePassForm, truck_number: value })} />
+            <TextField label="Driver name" value={gatePassForm.driver_name} onChange={(value) => setGatePassForm({ ...gatePassForm, driver_name: value })} />
+            <TextField label="Driver mobile no." value={gatePassForm.driver_phone} onChange={(value) => setGatePassForm({ ...gatePassForm, driver_phone: value })} />
+            <div className="md:col-span-2"><TextField label="Loading address" value={gatePassForm.loading_address} onChange={(value) => setGatePassForm({ ...gatePassForm, loading_address: value })} /></div>
+            <div className="md:col-span-2"><TextField label="Delivery address" value={gatePassForm.delivery_address} onChange={(value) => setGatePassForm({ ...gatePassForm, delivery_address: value })} /></div>
+            <div className="md:col-span-2"><TextAreaField label="Seal numbers" value={gatePassForm.seal_numbers} onChange={(value) => setGatePassForm({ ...gatePassForm, seal_numbers: value })} placeholder="One seal number per line or comma-separated" /></div>
+          </div>
+          {gatePassError && <div className="mt-5 rounded-xl bg-red-50 p-3 text-sm text-red-700">{gatePassError}</div>}
+          <div className="mt-7 flex justify-end gap-3">
+            <button type="button" className="btn-secondary" onClick={() => setGatePassOpen(false)}>Cancel</button>
+            <button className="btn-primary" disabled={gatePassSaving}><Save size={18} /> {gatePassSaving ? "Saving..." : "Save gate pass info"}</button>
+          </div>
+        </form>
+      </Modal>
     </>
   );
+}
+
+function toGatePassForm(order) {
+  return {
+    ...emptyGatePass,
+    clearing_agent_id: fieldValue(order.clearing_agent_id),
+    transporter_name: fieldValue(order.transporter_name),
+    transporter_contact: fieldValue(order.transporter_contact),
+    transporter_phone: fieldValue(order.transporter_phone),
+    truck_number: fieldValue(order.truck_number),
+    driver_name: fieldValue(order.driver_name),
+    driver_phone: fieldValue(order.driver_phone),
+    loading_address: fieldValue(order.loading_address) || emptyGatePass.loading_address,
+    delivery_address: fieldValue(order.delivery_address) || emptyGatePass.delivery_address,
+    seal_numbers: sealText(order.seal_numbers)
+  };
 }
 
 function CertificateOfOriginDocument({ order, totals }) {
@@ -328,7 +430,11 @@ function GatePassDocument({ order, totals }) {
   const seals = sealList(order.seal_numbers);
   const clearingName = order.clearing_agent_name || "A.A ENTERPRISES, KARACHI";
   const clearingPhones = [order.clearing_agent_phone, order.clearing_agent_contact].filter(Boolean);
-  const transporterName = order.transporter_name || order.transporter_contact || "-";
+  const transporterName = [
+    order.transporter_name,
+    order.transporter_contact,
+    order.transporter_phone
+  ].filter(Boolean).join(" / ") || "-";
 
   return (
     <div className="print-document gate-pass-sheet bg-white text-[#202020]">
@@ -803,8 +909,15 @@ function GenericDocumentPreview({ order, preview }) {
   );
 }
 
-function SalesContractDocument({ order, totals }) {
-  const advanceAmount = Number(totals.client) * (Number(order.advance_percentage) / 100);
+function SalesContractDocument({ order }) {
+  const commercialItems = order.items.filter((item) => !item.is_sample);
+  const commercialTotals = {
+    packages: commercialItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    net: commercialItems.reduce((sum, item) => sum + Number(item.total_net_weight || 0), 0),
+    gross: commercialItems.reduce((sum, item) => sum + Number(item.total_gross_weight || 0), 0),
+    client: commercialItems.reduce((sum, item) => sum + Number(item.client_value || 0), 0)
+  };
+  const advanceAmount = Number(commercialTotals.client) * (Number(order.advance_percentage) / 100);
   return (
     <div className="print-document sale-contract-sheet bg-white text-[#202020]">
       <header className="sale-brand"><img src="/brand/za-header.png" alt="Z.A Food Industries" /></header>
@@ -816,7 +929,7 @@ function SalesContractDocument({ order, totals }) {
       <h1 className="sale-title">SALE CONTRACT</h1>
       <section className="sale-top-grid">
         <div className="sale-value-stack">
-          <ContractValue label="Invoice Value" value={money(totals.client, order.currency)} />
+          <ContractValue label="Invoice Value" value={money(commercialTotals.client, order.currency)} />
           <ContractValue label={`Advance ${compactNumber(order.advance_percentage)}%`} value={money(advanceAmount, order.currency)} />
         </div>
         <div className="sale-invoice-box">
@@ -848,13 +961,13 @@ function SalesContractDocument({ order, totals }) {
         <DetailPanel title="Container Detail" rows={[
           ["Container #", order.container_number || "As Per Schedule"],
           ["Loading Date", "As Per Schedule"],
-          ["Total Cartons", compactNumber(totals.packages)],
-          ["Cargo Net Weight", `${number(totals.net)} Per Container`],
-          ["Cargo Gross Weight", `${number(totals.gross)} Per Container`],
+          ["Total Cartons", compactNumber(commercialTotals.packages)],
+          ["Cargo Net Weight", `${number(commercialTotals.net)} Per Container`],
+          ["Cargo Gross Weight", `${number(commercialTotals.gross)} Per Container`],
           ["Tolerance", "10% +/-"]
         ]} />
       </section>
-      <ProductTable order={order} />
+      <ProductTable order={order} items={commercialItems} />
       <section className="sale-lower-grid">
         <div>
           <DetailPanel title="Terms Of Sale" rows={company.terms.map((term, index) => [`${index + 1}.`, term])} compact />
@@ -876,7 +989,7 @@ function SalesContractDocument({ order, totals }) {
           <DetailPanel title="Bank Detail" rows={company.bank} compact />
           <div className="sale-total-box">
             <span>Total</span>
-            <strong>{money(totals.client, order.currency)}</strong>
+            <strong>{money(commercialTotals.client, order.currency)}</strong>
             <small>Currency&nbsp;&nbsp;&nbsp;&nbsp;{order.currency || "USD"}</small>
           </div>
           <div className="sale-note">Note: Documents are checked as required by export office worksheet, given to Z.A. Food Industries official head account.</div>
@@ -886,8 +999,8 @@ function SalesContractDocument({ order, totals }) {
   );
 }
 
-function ProductTable({ order }) {
-  const rows = order.items.map((item) => ({
+function ProductTable({ order, items }) {
+  const rows = items.map((item) => ({
     ...item,
     displayName: item.description_override || item.product_name,
     pcWeight: formatPieceWeight(item.product_unit_weight_grams),
@@ -1022,6 +1135,36 @@ function Info({ label, value }) {
   );
 }
 
+function TextField({ label, value, onChange }) {
+  return (
+    <label>
+      <span className="label">{label}</span>
+      <input className="field" value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function TextAreaField({ label, value, onChange, placeholder }) {
+  return (
+    <label>
+      <span className="label">{label}</span>
+      <textarea className="field min-h-24" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function SelectField({ label, value, onChange, options }) {
+  return (
+    <label>
+      <span className="label">{label}</span>
+      <select className="field" value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Select...</option>
+        {options.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+      </select>
+    </label>
+  );
+}
+
 function formatDate(value) {
   if (!value) return "-";
   return new Date(value).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" }).replace(/ /g, "-");
@@ -1047,6 +1190,14 @@ function sealList(value) {
     return String(value).split(/\r?\n|,/).map((seal) => seal.trim()).filter(Boolean);
   }
   return [];
+}
+
+function sealText(value) {
+  return sealList(value).join("\n");
+}
+
+function fieldValue(value) {
+  return value ?? "";
 }
 
 function packingTotals(items) {

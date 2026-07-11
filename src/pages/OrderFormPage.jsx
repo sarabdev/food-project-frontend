@@ -13,10 +13,6 @@ const emptyOrder = {
   final_destination: "", shipping_type: "CAF", shipped_per: "By Sea",
   container_number: "", container_type: "40 HC", cbm: 0,
   freight_term: "Freight Prepaid", customer_instructions: "", notes: "",
-  truck_number: "", driver_name: "", driver_phone: "",
-  clearing_agent_id: "", transporter_id: "",
-  loading_address: "Z.A Food Industries, Marzi Pura, Narwala Road, Faisalabad",
-  delivery_address: "Karachi - Pakistan", seal_numbers: ""
 };
 
 export function OrderFormPage() {
@@ -57,8 +53,6 @@ export function OrderFormPage() {
 
   const clients = parties.filter((party) => party.party_type === "client");
   const consignees = parties.filter((party) => party.party_type === "customs_consignee");
-  const clearingAgents = parties.filter((party) => party.party_type === "clearing_agent");
-  const transporters = parties.filter((party) => party.party_type === "transporter");
   const totals = useMemo(() => items.reduce((sum, item) => ({
     packages: sum.packages + Number(item.quantity || 0),
     net: sum.net + Number(item.quantity || 0) * Number(item.net_weight_per_carton || 0),
@@ -89,7 +83,6 @@ export function OrderFormPage() {
       const payload = {
         ...form,
         valid_until: form.valid_until || null,
-        seal_numbers: form.seal_numbers.split(/\r?\n|,/).map((seal) => seal.trim()).filter(Boolean),
         items
       };
       if (isEditing) {
@@ -111,7 +104,7 @@ export function OrderFormPage() {
       <PageHeader
         eyebrow={isEditing ? "Edit order" : "New order"}
         title={isEditing ? "Edit export order" : "Create export order"}
-        description={isEditing ? "Update shipment, gate pass and product information before printing documents." : "The invoice number will be generated automatically when this draft is saved."}
+        description={isEditing ? "Update shipment and product information before printing documents." : "The invoice number will be generated automatically when this draft is saved."}
         action={isEditing && <Link to={`/orders/${id}`} className="btn-secondary">Cancel</Link>}
       />
       {loading ? <div className="py-20 text-center text-slate-400">Loading order...</div> : (
@@ -133,19 +126,6 @@ export function OrderFormPage() {
             <TextField label="Advance %" type="number" value={form.advance_percentage} onChange={(value) => setForm({ ...form, advance_percentage: value })} />
             <div className="md:col-span-2"><TextField label="Payment terms" value={form.payment_term} onChange={(value) => setForm({ ...form, payment_term: value })} /></div>
             <div className="md:col-span-2"><TextField label="Freight terms" value={form.freight_term} onChange={(value) => setForm({ ...form, freight_term: value })} /></div>
-          </div>
-        </section>
-        <section className="panel mt-6 p-5 md:p-7">
-          <h2 className="mb-5 font-bold">Gate pass details</h2>
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-            <SelectField label="Clearing agent" value={form.clearing_agent_id} onChange={(value) => setForm({ ...form, clearing_agent_id: value })} options={clearingAgents} />
-            <SelectField label="Transporter" value={form.transporter_id} onChange={(value) => setForm({ ...form, transporter_id: value })} options={transporters} />
-            <TextField label="Truck no." value={form.truck_number} onChange={(value) => setForm({ ...form, truck_number: value })} />
-            <TextField label="Driver name" value={form.driver_name} onChange={(value) => setForm({ ...form, driver_name: value })} />
-            <TextField label="Driver mobile no." value={form.driver_phone} onChange={(value) => setForm({ ...form, driver_phone: value })} />
-            <div className="md:col-span-2"><TextField label="Loading address" value={form.loading_address} onChange={(value) => setForm({ ...form, loading_address: value })} /></div>
-            <div className="md:col-span-2"><TextField label="Delivery address" value={form.delivery_address} onChange={(value) => setForm({ ...form, delivery_address: value })} /></div>
-            <div className="md:col-span-2"><TextAreaField label="Seal numbers" value={form.seal_numbers} onChange={(value) => setForm({ ...form, seal_numbers: value })} placeholder="One seal number per line or comma-separated" /></div>
           </div>
         </section>
         <section className="panel mt-6 overflow-hidden">
@@ -202,14 +182,6 @@ function toEditableOrder(order) {
     freight_term: fieldValue(order.freight_term),
     customer_instructions: fieldValue(order.customer_instructions),
     notes: fieldValue(order.notes),
-    truck_number: fieldValue(order.truck_number),
-    driver_name: fieldValue(order.driver_name),
-    driver_phone: fieldValue(order.driver_phone),
-    clearing_agent_id: fieldValue(order.clearing_agent_id),
-    transporter_id: fieldValue(order.transporter_id),
-    loading_address: fieldValue(order.loading_address),
-    delivery_address: fieldValue(order.delivery_address),
-    seal_numbers: sealText(order.seal_numbers)
   };
 }
 
@@ -238,19 +210,6 @@ function dateInputValue(value) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
-function sealText(value) {
-  if (!value) return "";
-  if (Array.isArray(value)) return value.filter(Boolean).join("\n");
-  try {
-    const parsed = JSON.parse(value);
-    if (Array.isArray(parsed)) return parsed.filter(Boolean).join("\n");
-  } catch {
-    return String(value);
-  }
-  return "";
-}
-
 function TextField({ label, value, onChange, type = "text", required }) { return <label><span className="label">{label}</span><input className="field" required={required} type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.01" : undefined} value={value} onChange={(e) => onChange(e.target.value)} /></label>; }
-function TextAreaField({ label, value, onChange, placeholder }) { return <label><span className="label">{label}</span><textarea className="field min-h-24" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} /></label>; }
 function SelectField({ label, value, onChange, options, required }) { return <label><span className="label">{label}</span><select className="field" required={required} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>; }
 function Summary({ label, value }) { return <div><div className="text-xs font-bold uppercase tracking-wide text-forest-600">{label}</div><div className="mt-1 text-lg font-bold text-forest-900">{value}</div></div>; }

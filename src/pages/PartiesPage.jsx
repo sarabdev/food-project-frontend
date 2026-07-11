@@ -8,8 +8,7 @@ import { useAuth } from "../context/AuthContext";
 const types = {
   client: "Client",
   customs_consignee: "Customs Consignee",
-  clearing_agent: "Clearing Agent",
-  transporter: "Transporter"
+  clearing_agent: "Clearing Agent"
 };
 const empty = { party_type: "client", name: "", contact_person: "", business_id: "", phone: "", email: "", address_line_1: "", address_line_2: "", city: "", state_region: "", country: "", postal_code: "" };
 
@@ -44,7 +43,7 @@ export function PartiesPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Master data" title="Business parties" description="Manage real clients, customs consignees, clearing agents and transporters." action={can("parties.create") && <button className="btn-primary" onClick={() => open()}><Plus size={18} /> Add party</button>} />
+      <PageHeader eyebrow="Master data" title="Business parties" description="Manage real clients, customs consignees and clearing agents." action={can("parties.create") && <button className="btn-primary" onClick={() => open()}><Plus size={18} /> Add party</button>} />
       <div className="mb-5 flex flex-wrap gap-2">
         <button onClick={() => setFilter("")} className={filter === "" ? "btn-primary" : "btn-secondary"}>All</button>
         {Object.entries(types).map(([value, label]) => <button key={value} onClick={() => setFilter(value)} className={filter === value ? "btn-primary" : "btn-secondary"}>{label}</button>)}
@@ -77,4 +76,3 @@ export function PartiesPage() {
     </>
   );
 }
-
