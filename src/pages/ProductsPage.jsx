@@ -2,12 +2,20 @@ import { useEffect, useState } from "react";
 import { Boxes, Pencil, Plus } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Modal } from "../components/Modal";
-import { api, messageFromError } from "../lib/api";
+import { api, assetUrl, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+
+const packageTypes = ["Carton", "Jar", "Pouch", "Box"];
+const emptyPackagingDetails = {
+  pieces_per_box: 0,
+  boxes_per_pouch: 0,
+  pouches_per_jar: 0,
+  jars_per_carton: 0
+};
 
 const emptyProduct = {
   sku: "", name: "", description: "", hs_code: "", package_type: "Carton",
-  units_per_carton: 0, pieces_per_unit: 0, unit_weight_grams: 0,
+  units_per_carton: 0, pieces_per_unit: 0, packaging_details: emptyPackagingDetails, unit_weight_grams: 0,
   net_weight_per_carton: 0, gross_weight_per_carton: 0,
   default_client_price: 0, default_customs_price_per_kg: 0, image_url: ""
 };
@@ -17,15 +25,27 @@ export function ProductsPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyProduct);
   const [imageFile, setImageFile] = useState(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [error, setError] = useState("");
   const { can } = useAuth();
 
   const load = () => api.get("/products").then(({ data }) => setProducts(data.products));
   useEffect(() => { load(); }, []);
 
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreviewUrl(form.image_url ? assetUrl(form.image_url) : "");
+      return undefined;
+    }
+
+    const previewUrl = URL.createObjectURL(imageFile);
+    setImagePreviewUrl(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [form.image_url, imageFile]);
+
   function open(product = null) {
     setEditing(product);
-    setForm(product ? { ...product } : emptyProduct);
+    setForm(product ? normalizeProduct(product) : emptyProduct);
     setImageFile(null);
     setError("");
   }
@@ -34,7 +54,12 @@ export function ProductsPage() {
     event.preventDefault();
     try {
       const payload = new FormData();
-      Object.entries(form).forEach(([key, value]) => {
+      const productPayload = withDerivedPacking(form);
+      Object.entries(productPayload).forEach(([key, value]) => {
+        if (key === "packaging_details") {
+          payload.append(key, JSON.stringify(value));
+          return;
+        }
         payload.append(key, value ?? "");
       });
       if (imageFile) payload.append("image", imageFile);
@@ -66,7 +91,7 @@ export function ProductsPage() {
                 <tr key={product.id}>
                   <td className="px-5 py-4"><div className="font-semibold">{product.name}</div><div className="text-xs text-slate-400">{product.sku || "No SKU"}</div></td>
                   <td className="px-5 py-4">{product.hs_code || "—"}</td>
-                  <td className="px-5 py-4">{product.units_per_carton} units × {product.pieces_per_unit} pieces</td>
+                  <td className="px-5 py-4">{packingSummary(product)}</td>
                   <td className="px-5 py-4">{product.net_weight_per_carton} / {product.gross_weight_per_carton} kg</td>
                   <td className="px-5 py-4">${product.default_client_price}</td>
                   <td className="px-5 py-4">${product.default_customs_price_per_kg}</td>
@@ -87,12 +112,10 @@ export function ProductsPage() {
             <Field label="HS code"><input className="field" value={form.hs_code || ""} onChange={(e) => setForm({ ...form, hs_code: e.target.value })} /></Field>
             <Field label="Package type">
               <select className="field" value={form.package_type || "Carton"} onChange={(e) => setForm({ ...form, package_type: e.target.value })}>
-                <option value="Carton">Carton</option>
-                <option value="Jar">Jar</option>
+                {packageTypes.map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
             </Field>
-            <NumberField label="Units per carton" field="units_per_carton" form={form} setForm={setForm} />
-            <NumberField label="Pieces per unit" field="pieces_per_unit" form={form} setForm={setForm} />
+            <PackagingFields form={form} setForm={setForm} />
             <NumberField label="Unit weight (grams)" field="unit_weight_grams" form={form} setForm={setForm} />
             <NumberField label="Net weight/carton (kg)" field="net_weight_per_carton" form={form} setForm={setForm} />
             <NumberField label="Gross weight/carton (kg)" field="gross_weight_per_carton" form={form} setForm={setForm} />
@@ -106,6 +129,11 @@ export function ProductsPage() {
                 onChange={(e) => setImageFile(e.target.files?.[0] || null)}
               />
               {form.image_url && !imageFile && <div className="mt-1 text-xs text-slate-400">Current image will be kept unless you choose a new one.</div>}
+              {imagePreviewUrl && (
+                <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-2">
+                  <img className="h-32 w-full rounded-md object-contain" src={imagePreviewUrl} alt="Product preview" />
+                </div>
+              )}
             </Field>
             <div className="md:col-span-2"><Field label="Print description"><textarea className="field min-h-24" value={form.description || ""} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field></div>
           </div>
@@ -121,6 +149,101 @@ function Field({ label, children }) {
   return <label><span className="label">{label}</span>{children}</label>;
 }
 
+function PackagingFields({ form, setForm }) {
+  const detailFields = packagingFieldsFor(form.package_type);
+  return (
+    <div className="md:col-span-2">
+      <div className="grid gap-5 md:grid-cols-2">
+        {detailFields.map(({ field, label }) => (
+          <Field key={field} label={label}>
+            <input
+              className="field"
+              type="number"
+              min="0"
+              step="0.001"
+              value={form.packaging_details?.[field] ?? 0}
+              onChange={(e) => setForm({
+                ...form,
+                packaging_details: {
+                  ...emptyPackagingDetails,
+                  ...(form.packaging_details || {}),
+                  [field]: e.target.value
+                }
+              })}
+            />
+          </Field>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function NumberField({ label, field, form, setForm }) {
   return <Field label={label}><input className="field" type="number" min="0" step="0.001" value={form[field]} onChange={(e) => setForm({ ...form, [field]: e.target.value })} /></Field>;
+}
+
+function normalizeProduct(product) {
+  return {
+    ...emptyProduct,
+    ...product,
+    package_type: packageTypes.includes(product.package_type) ? product.package_type : "Carton",
+    packaging_details: normalizePackagingDetails(product.packaging_details, product)
+  };
+}
+
+function normalizePackagingDetails(value, product = {}) {
+  let details = value;
+  if (typeof details === "string") {
+    try {
+      details = JSON.parse(details);
+    } catch {
+      details = {};
+    }
+  }
+  return {
+    ...emptyPackagingDetails,
+    ...(details || {}),
+    pieces_per_box: details?.pieces_per_box ?? product.units_per_carton ?? 0
+  };
+}
+
+function packagingFieldsFor(packageType) {
+  const fields = [{ field: "pieces_per_box", label: "Pieces per box" }];
+  if (["Pouch", "Jar", "Carton"].includes(packageType)) fields.push({ field: "boxes_per_pouch", label: "Boxes per pouch" });
+  if (["Jar", "Carton"].includes(packageType)) fields.push({ field: "pouches_per_jar", label: "Pouches per jar" });
+  if (packageType === "Carton") fields.push({ field: "jars_per_carton", label: "Jars per carton" });
+  return fields;
+}
+
+function withDerivedPacking(product) {
+  const details = normalizePackagingDetails(product.packaging_details);
+  const selectedFields = packagingFieldsFor(product.package_type).map(({ field }) => field);
+  const packagingDetails = Object.fromEntries(
+    Object.entries(details).map(([key, value]) => [key, selectedFields.includes(key) ? Number(value || 0) : 0])
+  );
+  return {
+    ...product,
+    packaging_details: packagingDetails,
+    units_per_carton: packagingDetails.pieces_per_box,
+    pieces_per_unit: derivedPackageCount(product.package_type, packagingDetails)
+  };
+}
+
+function derivedPackageCount(packageType, details) {
+  if (packageType === "Carton") return details.jars_per_carton;
+  if (packageType === "Jar") return details.pouches_per_jar;
+  if (packageType === "Pouch") return details.boxes_per_pouch;
+  return 1;
+}
+
+function packingSummary(product) {
+  const normalized = normalizeProduct(product);
+  return packagingFieldsFor(normalized.package_type)
+    .map(({ field, label }) => `${compactNumber(normalized.packaging_details[field])} ${label.toLowerCase()}`)
+    .join(", ");
+}
+
+function compactNumber(value) {
+  const number = Number(value || 0);
+  return Number.isInteger(number) ? number.toLocaleString() : number.toLocaleString(undefined, { maximumFractionDigits: 3 });
 }

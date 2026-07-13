@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { Edit3, FileText, Printer, Save, Truck } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { Edit3, FileText, Printer, Save, Trash2, Truck } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { Modal } from "../components/Modal";
@@ -58,6 +58,7 @@ const emptyGatePass = {
 
 export function OrderDetailsPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [parties, setParties] = useState([]);
   const [preview, setPreview] = useState(null);
@@ -82,6 +83,7 @@ export function OrderDetailsPage() {
 
   if (!order) return <div className="py-20 text-center text-slate-400">Loading order...</div>;
   const canEditOrder = can("orders.edit") && !["shipped", "completed", "cancelled"].includes(order.status);
+  const canDeleteOrder = can("orders.delete") && !["shipped", "completed"].includes(order.status);
   const clearingAgents = parties.filter((party) => party.party_type === "clearing_agent");
   const hasGatePassInfo = Boolean(order.truck_number || order.driver_name || order.driver_phone || order.transporter_name || order.transporter_contact || order.transporter_phone || order.clearing_agent_id || sealList(order.seal_numbers).length);
 
@@ -120,13 +122,19 @@ export function OrderDetailsPage() {
     window.print();
   }
 
+  async function deleteOrder() {
+    if (!window.confirm(`Delete order ${order.invoice_number}? This cannot be undone.`)) return;
+    await api.delete(`/orders/${order.id}`);
+    navigate("/orders");
+  }
+
   return (
     <>
       <PageHeader
         eyebrow="Export order"
         title={order.invoice_number}
         description={`${order.client_name} - ${new Date(order.contract_date).toLocaleDateString()}`}
-        action={<div className="flex flex-wrap items-center gap-3">{canEditOrder && <Link to={`/orders/${order.id}/edit`} className="btn-secondary"><Edit3 size={18} /> Edit order</Link>}<StatusBadge status={order.status} /></div>}
+        action={<div className="flex flex-wrap items-center gap-3">{canEditOrder && <Link to={`/orders/${order.id}/edit`} className="btn-secondary"><Edit3 size={18} /> Edit order</Link>}{canDeleteOrder && <button type="button" onClick={deleteOrder} className="btn-secondary text-red-600 hover:text-red-700"><Trash2 size={18} /> Delete order</button>}<StatusBadge status={order.status} /></div>}
       />
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
@@ -302,7 +310,7 @@ function CertificateOfOriginDocument({ order, totals }) {
           {firstItem && (
             <>
               <span>{firstItem.description_override || firstItem.product_name}</span>
-              <span>{formatPieceWeight(firstItem.product_unit_weight_grams)} X {compactNumber(firstItem.units_per_carton)} PIECES X {compactNumber(firstItem.product_pieces_per_unit)} {firstItem.product_package_type || firstItem.quantity_unit || "JAR"}</span>
+              <span>{formatPackagingLine(firstItem)}</span>
               <span>HS CODE: {firstItem.hs_code || "-"}</span>
             </>
           )}
@@ -378,7 +386,7 @@ function BLInstructionsDocument({ order, totals }) {
           {order.items.map((item) => (
             <div key={item.id} className="bl-product-line">
               <strong>{item.description_override || item.product_name}</strong>
-              {!item.is_sample && <span>{formatPieceWeight(item.product_unit_weight_grams)} X {compactNumber(item.units_per_carton)} PIECES X {compactNumber(item.product_pieces_per_unit)} {item.product_package_type || item.quantity_unit || "JAR"}</span>}
+              {!item.is_sample && <span>{formatPackagingLine(item)}</span>}
               <span>HS CODE: {item.hs_code || "-"}</span>
             </div>
           ))}
@@ -527,7 +535,7 @@ function GatePassLine({ item, index, isSample = false }) {
       <td>{index}</td>
       <td className="gate-description">
         <strong>{item.description_override || item.product_name}</strong>
-        {!isSample && <span>{formatPieceWeight(item.product_unit_weight_grams)} X {compactNumber(item.units_per_carton)} PIECES X {compactNumber(item.product_pieces_per_unit)} {item.product_package_type || item.quantity_unit || "JAR"}</span>}
+        {!isSample && <span>{formatPackagingLine(item)}</span>}
       </td>
       <td>{compactNumber(item.quantity)}{isSample ? <><br />{unitShortLabel(item.quantity_unit)}</> : null}</td>
     </tr>
@@ -684,7 +692,7 @@ function InvoiceLine({ item, currency, isCustoms }) {
       <td>{compactNumber(item.quantity)} {unitShortLabel(item.quantity_unit)}</td>
       <td className="invoice-description">
         <strong>{item.description_override || item.product_name}</strong>
-        <span>{formatPieceWeight(item.product_unit_weight_grams)} X {compactNumber(item.units_per_carton)} PIECES X {compactNumber(item.product_pieces_per_unit)} {item.product_package_type || item.quantity_unit || "JAR"}</span>
+        <span>{formatPackagingLine(item)}</span>
         <span>HS CODE: {item.hs_code || "-"}</span>
       </td>
       {isCustoms && <td>{number(item.total_net_weight)}</td>}
@@ -842,14 +850,14 @@ function PackingLine({ item, index }) {
   const cartons = Number(item.quantity || 0);
   const net = Number(item.total_net_weight || 0);
   const gross = Number(item.total_gross_weight || 0);
-  const boxes = Number(item.product_pieces_per_unit || item.units_per_carton || 0);
+  const boxes = Number(packageDisplayCount(item) || item.units_per_carton || 0);
   return (
     <tr>
       <td>{index}</td>
       <td>{cartonRange(item)}</td>
       <td className="packing-description">
         <strong>{item.description_override || item.product_name}</strong>
-        <span>{formatPieceWeight(item.product_unit_weight_grams)} X {compactNumber(item.units_per_carton)} PIECES X {compactNumber(item.product_pieces_per_unit)} {item.product_package_type || item.quantity_unit || "JAR"}</span>
+        <span>{formatPackagingLine(item)}</span>
         <span>HS CODE: {item.hs_code || "-"}</span>
       </td>
       <td>{compactNumber(cartons)}</td>
@@ -1004,8 +1012,8 @@ function ProductTable({ order, items }) {
     ...item,
     displayName: item.description_override || item.product_name,
     pcWeight: formatPieceWeight(item.product_unit_weight_grams),
-    pieces: item.units_per_carton,
-    jarBox: item.product_pieces_per_unit,
+    pieces: packagingDetails(item.product_packaging_details)?.pieces_per_box || item.units_per_carton,
+    jarBox: packageDisplayCount(item),
     pkgType: item.product_package_type || item.quantity_unit || "CTN",
     unitPrice: Number(item.client_price_per_carton),
     total: Number(item.client_value)
@@ -1218,7 +1226,7 @@ function packingTotals(items) {
 
 function packingPouchTotal(items) {
   return items.reduce((sum, item) => {
-    const boxes = Number(item.product_pieces_per_unit || item.units_per_carton || 0);
+    const boxes = Number(packageDisplayCount(item) || item.units_per_carton || 0);
     return sum + Number(item.quantity || 0) * boxes;
   }, 0);
 }
@@ -1260,6 +1268,45 @@ function formatPieceWeight(value) {
   if (!grams) return "-";
   if (grams >= 1000) return `${compactNumber(grams / 1000)} KG`;
   return `${compactNumber(grams)} G`;
+}
+
+function formatPackagingLine(item) {
+  const details = packagingDetails(item.product_packaging_details);
+  if (!details) {
+    return `${formatPieceWeight(item.product_unit_weight_grams)} X ${compactNumber(item.units_per_carton)} PIECES X ${compactNumber(item.product_pieces_per_unit)} ${item.product_package_type || item.quantity_unit || "JAR"}`;
+  }
+
+  const parts = [`${formatPieceWeight(item.product_unit_weight_grams)} X ${compactNumber(details.pieces_per_box)} PIECES`];
+  if (["Pouch", "Jar", "Carton"].includes(item.product_package_type) && details.boxes_per_pouch) {
+    parts.push(`${compactNumber(details.boxes_per_pouch)} BOX`);
+  }
+  if (["Jar", "Carton"].includes(item.product_package_type) && details.pouches_per_jar) {
+    parts.push(`${compactNumber(details.pouches_per_jar)} POUCH`);
+  }
+  if (item.product_package_type === "Carton" && details.jars_per_carton) {
+    parts.push(`${compactNumber(details.jars_per_carton)} JAR`);
+  }
+  parts.push(String(item.product_package_type || item.quantity_unit || "CARTON").toUpperCase());
+  return parts.join(" X ");
+}
+
+function packagingDetails(value) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function packageDisplayCount(item) {
+  const details = packagingDetails(item.product_packaging_details);
+  if (!details) return item.product_pieces_per_unit;
+  if (item.product_package_type === "Carton") return details.jars_per_carton;
+  if (item.product_package_type === "Jar") return details.pouches_per_jar;
+  if (item.product_package_type === "Pouch") return details.boxes_per_pouch;
+  return item.product_pieces_per_unit || 1;
 }
 
 function money(value, currency = "USD") {
