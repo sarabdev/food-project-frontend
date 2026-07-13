@@ -4,7 +4,7 @@ import { Edit3, FileText, Printer, Save, Truck } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { Modal } from "../components/Modal";
-import { api, messageFromError } from "../lib/api";
+import { api, assetUrl, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
 const documents = [
@@ -1058,7 +1058,7 @@ function ProductTable({ order, items }) {
               <td>{index + 1}</td>
               <td className="product-name">{item.displayName}</td>
               <td>{order.container_number || `CONTAINER-${index + 1}`}</td>
-              <td className="product-image-cell">{item.product_image_url ? <img src={item.product_image_url} alt="" /> : <div className="product-image-empty">{item.displayName}</div>}</td>
+              <td className="product-image-cell">{item.product_image_url ? <img src={assetUrl(item.product_image_url)} alt="" /> : <div className="product-image-empty">{item.displayName}</div>}</td>
               <td>{item.pcWeight}</td>
               <td>{compactNumber(item.pieces)}</td>
               <td>{compactNumber(item.jarBox)}</td>
