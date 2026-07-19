@@ -3,7 +3,7 @@ import {
   ArrowLeft, ArrowRight, Banknote, CalendarDays, CheckCircle2,
   ChevronRight, CircleDollarSign, Landmark, ReceiptText, Search, WalletCards
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { api, messageFromError } from "../lib/api";
@@ -28,6 +28,7 @@ export function LedgerPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
   const { can } = useAuth();
 
   async function loadSummary() {
@@ -58,6 +59,10 @@ export function LedgerPage() {
 
   useEffect(() => {
     loadSummary()
+      .then(() => {
+        const partyId = searchParams.get("party");
+        if (partyId) return loadDetail(partyId);
+      })
       .catch((requestError) => setError(messageFromError(requestError)))
       .finally(() => setLoading(false));
   }, []);
@@ -98,6 +103,7 @@ export function LedgerPage() {
     setError("");
     setSuccess("");
     setDetail(null);
+    setSearchParams({ party: String(partyId) });
     await loadDetail(partyId);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -107,6 +113,7 @@ export function LedgerPage() {
     setPayment(emptyPayment);
     setError("");
     setSuccess("");
+    setSearchParams({});
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 

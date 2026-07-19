@@ -57,7 +57,9 @@
   }
 
   .print-document,
-  .print-document * {
+  .print-document *,
+  .report-print,
+  .report-print * {
     visibility: visible;
   }
 
@@ -66,6 +68,15 @@
     margin: 0 !important;
     position: fixed !important;
     top: 0 !important;
+  }
+
+  .report-print {
+    background: white;
+    left: 0 !important;
+    padding: 10mm !important;
+    position: absolute !important;
+    top: 0 !important;
+    width: 100% !important;
   }
 
   body {
