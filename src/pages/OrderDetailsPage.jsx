@@ -1012,7 +1012,7 @@ function ProductTable({ order, items }) {
     ...item,
     displayName: item.description_override || item.product_name,
     pcWeight: formatPieceWeight(item.product_unit_weight_grams),
-    pieces: packagingDetails(item.product_packaging_details)?.pieces_per_box || item.units_per_carton,
+    pieces: item.product_pieces_per_unit,
     jarBox: packageDisplayCount(item),
     pkgType: item.product_package_type || item.quantity_unit || "CTN",
     unitPrice: Number(item.client_price_per_carton),
@@ -1054,7 +1054,7 @@ function ProductTable({ order, items }) {
           <tr>
             <th>PC<br />Weight</th>
             <th>No of<br />PCS</th>
-            <th># of<br />Jar / Box</th>
+            <th># of<br />Jar / Pouch / Box</th>
             <th>Pkg<br />Type</th>
             <th>Net<br />Weight</th>
             <th>Gross<br />Weight</th>
@@ -1267,46 +1267,16 @@ function formatPieceWeight(value) {
   const grams = Number(value || 0);
   if (!grams) return "-";
   if (grams >= 1000) return `${compactNumber(grams / 1000)} KG`;
-  return `${compactNumber(grams)} G`;
+  return `${compactNumber(grams)} GRAM`;
 }
 
 function formatPackagingLine(item) {
-  const details = packagingDetails(item.product_packaging_details);
-  if (!details) {
-    return `${formatPieceWeight(item.product_unit_weight_grams)} X ${compactNumber(item.units_per_carton)} PIECES X ${compactNumber(item.product_pieces_per_unit)} ${item.product_package_type || item.quantity_unit || "JAR"}`;
-  }
-
-  const parts = [`${formatPieceWeight(item.product_unit_weight_grams)} X ${compactNumber(details.pieces_per_box)} PIECES`];
-  if (["Pouch", "Jar", "Carton"].includes(item.product_package_type) && details.boxes_per_pouch) {
-    parts.push(`${compactNumber(details.boxes_per_pouch)} BOX`);
-  }
-  if (["Jar", "Carton"].includes(item.product_package_type) && details.pouches_per_jar) {
-    parts.push(`${compactNumber(details.pouches_per_jar)} POUCH`);
-  }
-  if (item.product_package_type === "Carton" && details.jars_per_carton) {
-    parts.push(`${compactNumber(details.jars_per_carton)} JAR`);
-  }
-  parts.push(String(item.product_package_type || item.quantity_unit || "CARTON").toUpperCase());
-  return parts.join(" X ");
-}
-
-function packagingDetails(value) {
-  if (!value) return null;
-  if (typeof value === "object") return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
+  const packType = String(item.product_package_type || "PACK").toUpperCase();
+  return `${formatPieceWeight(item.product_unit_weight_grams)} X ${compactNumber(item.product_pieces_per_unit)} PIECES X ${compactNumber(item.units_per_carton)} ${packType}`;
 }
 
 function packageDisplayCount(item) {
-  const details = packagingDetails(item.product_packaging_details);
-  if (!details) return item.product_pieces_per_unit;
-  if (item.product_package_type === "Carton") return details.jars_per_carton;
-  if (item.product_package_type === "Jar") return details.pouches_per_jar;
-  if (item.product_package_type === "Pouch") return details.boxes_per_pouch;
-  return item.product_pieces_per_unit || 1;
+  return item.units_per_carton || 0;
 }
 
 function money(value, currency = "USD") {

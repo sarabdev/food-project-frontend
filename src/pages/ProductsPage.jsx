@@ -1,21 +1,16 @@
 import { useEffect, useState } from "react";
-import { Boxes, Pencil, Plus } from "lucide-react";
+import { AlertTriangle, Boxes, Pencil, Plus } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Modal } from "../components/Modal";
 import { api, assetUrl, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
-const packageTypes = ["Carton", "Jar", "Pouch", "Box"];
-const emptyPackagingDetails = {
-  pieces_per_box: 0,
-  boxes_per_pouch: 0,
-  pouches_per_jar: 0,
-  jars_per_carton: 0
-};
+const packageTypes = ["Jar", "Pouch", "Box"];
 
 const emptyProduct = {
-  sku: "", name: "", description: "", hs_code: "", package_type: "Carton",
-  units_per_carton: 0, pieces_per_unit: 0, packaging_details: emptyPackagingDetails, unit_weight_grams: 0,
+  sku: "", name: "", description: "", hs_code: "", package_type: "Jar",
+  units_per_carton: 0, pieces_per_unit: 0, packaging_details: {}, unit_weight_grams: 0,
+  stock_in_hand: 0, low_stock_alert: 0,
   net_weight_per_carton: 0, gross_weight_per_carton: 0,
   default_client_price: 0, default_customs_price_per_kg: 0, image_url: ""
 };
@@ -85,20 +80,21 @@ export function ProductsPage() {
       <div className="panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Product</th><th className="px-5 py-3">HS Code</th><th className="px-5 py-3">Packing</th><th className="px-5 py-3">Net / Gross</th><th className="px-5 py-3">Client price</th><th className="px-5 py-3">Customs / kg</th><th /></tr></thead>
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Product</th><th className="px-5 py-3">HS Code</th><th className="px-5 py-3">Packing</th><th className="px-5 py-3">Stock</th><th className="px-5 py-3">Net / Gross</th><th className="px-5 py-3">Client price</th><th className="px-5 py-3">Customs / kg</th><th /></tr></thead>
             <tbody className="divide-y">
               {products.map((product) => (
                 <tr key={product.id}>
                   <td className="px-5 py-4"><div className="font-semibold">{product.name}</div><div className="text-xs text-slate-400">{product.sku || "No SKU"}</div></td>
                   <td className="px-5 py-4">{product.hs_code || "—"}</td>
                   <td className="px-5 py-4">{packingSummary(product)}</td>
+                  <td className="px-5 py-4"><StockSummary product={product} /></td>
                   <td className="px-5 py-4">{product.net_weight_per_carton} / {product.gross_weight_per_carton} kg</td>
                   <td className="px-5 py-4">${product.default_client_price}</td>
                   <td className="px-5 py-4">${product.default_customs_price_per_kg}</td>
                   <td className="px-5 py-4 text-right">{can("products.edit") && <button onClick={() => show(product)} className="rounded-lg p-2 hover:bg-slate-100"><Pencil size={17} /></button>}</td>
                 </tr>
               ))}
-              {!products.length && <tr><td colSpan="7" className="py-16 text-center"><Boxes className="mx-auto mb-3 text-slate-300" /><div className="text-slate-400">No products have been added.</div></td></tr>}
+              {!products.length && <tr><td colSpan="8" className="py-16 text-center"><Boxes className="mx-auto mb-3 text-slate-300" /><div className="text-slate-400">No products have been added.</div></td></tr>}
             </tbody>
           </table>
         </div>
@@ -111,12 +107,26 @@ export function ProductsPage() {
             <Field label="SKU"><input className="field" value={form.sku || ""} onChange={(e) => setForm({ ...form, sku: e.target.value })} /></Field>
             <Field label="HS code"><input className="field" value={form.hs_code || ""} onChange={(e) => setForm({ ...form, hs_code: e.target.value })} /></Field>
             <Field label="Package type">
-              <select className="field" value={form.package_type || "Carton"} onChange={(e) => setForm({ ...form, package_type: e.target.value })}>
+              <select className="field" value={form.package_type || "Jar"} onChange={(e) => setForm({ ...form, package_type: e.target.value })}>
                 {packageTypes.map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
             </Field>
-            <PackagingFields form={form} setForm={setForm} />
-            <NumberField label="Unit weight (grams)" field="unit_weight_grams" form={form} setForm={setForm} />
+            <NumberField label="Per-piece weight (grams)" field="unit_weight_grams" form={form} setForm={setForm} />
+            <NumberField label={`Pieces per ${form.package_type.toLowerCase()}`} field="pieces_per_unit" form={form} setForm={setForm} />
+            <NumberField label={`${pluralize(form.package_type)} per carton`} field="units_per_carton" form={form} setForm={setForm} />
+            <div className="md:col-span-2 mt-1 border-t border-slate-200 pt-5">
+              <div className="mb-4">
+                <h3 className="font-bold">Stock</h3>
+                <p className="text-xs text-slate-500">Stock is recorded in {pluralize(form.package_type).toLowerCase()} and converted to cartons automatically.</p>
+              </div>
+              <div className="grid gap-5 md:grid-cols-2">
+                <NumberField label={`Stock in hand (${pluralize(form.package_type).toLowerCase()})`} field="stock_in_hand" form={form} setForm={setForm} />
+                <NumberField label={`Low-stock alert (${pluralize(form.package_type).toLowerCase()})`} field="low_stock_alert" form={form} setForm={setForm} />
+              </div>
+              <div className="mt-4 rounded-xl bg-forest-50 p-4 text-sm text-forest-900">
+                <span className="font-semibold">Available cartons: </span>{stockCartonSummary(form)}
+              </div>
+            </div>
             <NumberField label="Net weight/carton (kg)" field="net_weight_per_carton" form={form} setForm={setForm} />
             <NumberField label="Gross weight/carton (kg)" field="gross_weight_per_carton" form={form} setForm={setForm} />
             <NumberField label="Client price/carton" field="default_client_price" form={form} setForm={setForm} />
@@ -149,35 +159,6 @@ function Field({ label, children }) {
   return <label><span className="label">{label}</span>{children}</label>;
 }
 
-function PackagingFields({ form, setForm }) {
-  const detailFields = packagingFieldsFor(form.package_type);
-  return (
-    <div className="md:col-span-2">
-      <div className="grid gap-5 md:grid-cols-2">
-        {detailFields.map(({ field, label }) => (
-          <Field key={field} label={label}>
-            <input
-              className="field"
-              type="number"
-              min="0"
-              step="0.001"
-              value={form.packaging_details?.[field] ?? 0}
-              onChange={(e) => setForm({
-                ...form,
-                packaging_details: {
-                  ...emptyPackagingDetails,
-                  ...(form.packaging_details || {}),
-                  [field]: e.target.value
-                }
-              })}
-            />
-          </Field>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function NumberField({ label, field, form, setForm }) {
   return <Field label={label}><input className="field" type="number" min="0" step="0.001" value={form[field]} onChange={(e) => setForm({ ...form, [field]: e.target.value })} /></Field>;
 }
@@ -186,12 +167,12 @@ function normalizeProduct(product) {
   return {
     ...emptyProduct,
     ...product,
-    package_type: packageTypes.includes(product.package_type) ? product.package_type : "Carton",
-    packaging_details: normalizePackagingDetails(product.packaging_details, product)
+    package_type: packageTypes.includes(product.package_type) ? product.package_type : "Jar",
+    packaging_details: normalizePackagingDetails(product.packaging_details)
   };
 }
 
-function normalizePackagingDetails(value, product = {}) {
+function normalizePackagingDetails(value) {
   let details = value;
   if (typeof details === "string") {
     try {
@@ -200,47 +181,52 @@ function normalizePackagingDetails(value, product = {}) {
       details = {};
     }
   }
-  return {
-    ...emptyPackagingDetails,
-    ...(details || {}),
-    pieces_per_box: details?.pieces_per_box ?? product.units_per_carton ?? 0
-  };
-}
-
-function packagingFieldsFor(packageType) {
-  const fields = [{ field: "pieces_per_box", label: "Pieces per box" }];
-  if (["Pouch", "Jar", "Carton"].includes(packageType)) fields.push({ field: "boxes_per_pouch", label: "Boxes per pouch" });
-  if (["Jar", "Carton"].includes(packageType)) fields.push({ field: "pouches_per_jar", label: "Pouches per jar" });
-  if (packageType === "Carton") fields.push({ field: "jars_per_carton", label: "Jars per carton" });
-  return fields;
+  return details || {};
 }
 
 function withDerivedPacking(product) {
-  const details = normalizePackagingDetails(product.packaging_details);
-  const selectedFields = packagingFieldsFor(product.package_type).map(({ field }) => field);
-  const packagingDetails = Object.fromEntries(
-    Object.entries(details).map(([key, value]) => [key, selectedFields.includes(key) ? Number(value || 0) : 0])
-  );
   return {
     ...product,
-    packaging_details: packagingDetails,
-    units_per_carton: packagingDetails.pieces_per_box,
-    pieces_per_unit: derivedPackageCount(product.package_type, packagingDetails)
+    packaging_details: {
+      pieces_per_pack: Number(product.pieces_per_unit || 0),
+      packs_per_carton: Number(product.units_per_carton || 0)
+    }
   };
 }
 
-function derivedPackageCount(packageType, details) {
-  if (packageType === "Carton") return details.jars_per_carton;
-  if (packageType === "Jar") return details.pouches_per_jar;
-  if (packageType === "Pouch") return details.boxes_per_pouch;
-  return 1;
+function packingSummary(product) {
+  return `${compactNumber(product.unit_weight_grams)} g × ${compactNumber(product.pieces_per_unit)} pieces × ${compactNumber(product.units_per_carton)} ${pluralize(product.package_type).toLowerCase()}`;
 }
 
-function packingSummary(product) {
-  const normalized = normalizeProduct(product);
-  return packagingFieldsFor(normalized.package_type)
-    .map(({ field, label }) => `${compactNumber(normalized.packaging_details[field])} ${label.toLowerCase()}`)
-    .join(", ");
+function StockSummary({ product }) {
+  const isLow = Number(product.stock_in_hand) <= Number(product.low_stock_alert) && Number(product.low_stock_alert) > 0;
+  return (
+    <div>
+      <div className={`font-semibold ${isLow ? "text-amber-700" : ""}`}>
+        {isLow && <AlertTriangle className="mr-1 inline" size={15} />}
+        {stockCartonSummary(product)}
+      </div>
+      <div className="mt-1 text-xs text-slate-400">
+        {compactNumber(product.stock_in_hand)} {pluralize(product.package_type).toLowerCase()} in hand
+      </div>
+    </div>
+  );
+}
+
+function stockCartonSummary(product) {
+  const stock = Number(product.stock_in_hand || 0);
+  const packsPerCarton = Number(product.units_per_carton || 0);
+  if (!packsPerCarton) return "Set packs per carton";
+  const fullCartons = Math.floor(stock / packsPerCarton);
+  const loosePacks = stock - fullCartons * packsPerCarton;
+  const looseText = loosePacks ? ` + ${compactNumber(loosePacks)} loose ${pluralize(product.package_type).toLowerCase()}` : "";
+  return `${compactNumber(fullCartons)} cartons${looseText}`;
+}
+
+function pluralize(value) {
+  const word = value || "Pack";
+  if (word.endsWith("x") || word.endsWith("ch")) return `${word}es`;
+  return word.endsWith("s") ? word : `${word}s`;
 }
 
 function compactNumber(value) {

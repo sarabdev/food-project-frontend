@@ -134,7 +134,10 @@ export function OrderFormPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3">Cartons / Packages</th><th className="px-4 py-3">Net / carton</th><th className="px-4 py-3">Gross / carton</th><th className="px-4 py-3">Client / carton</th><th className="px-4 py-3">Customs / kg</th><th className="px-4 py-3">Sample</th><th /></tr></thead>
-              <tbody className="divide-y">{items.map((item, index) => <tr key={index}><td className="px-4 py-3"><select className="field min-w-64" value={item.product_id} onChange={(e) => chooseProduct(index, e.target.value)}>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></td>{["quantity", "net_weight_per_carton", "gross_weight_per_carton", "client_price_per_carton", "customs_price_per_kg"].map((field) => <td key={field} className="px-4 py-3"><input className="field w-28" type="number" min="0" step="0.001" value={item[field]} onChange={(e) => updateItem(index, field, e.target.value)} /></td>)}<td className="px-4 py-3"><input type="checkbox" className="h-5 w-5 accent-forest-700" checked={item.is_sample} onChange={(e) => updateItem(index, "is_sample", e.target.checked)} /></td><td className="px-4 py-3"><button type="button" onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg p-2 text-red-500 hover:bg-red-50"><Trash2 size={17} /></button></td></tr>)}</tbody>
+              <tbody className="divide-y">{items.map((item, index) => {
+                const selectedProduct = products.find((product) => Number(product.id) === Number(item.product_id));
+                return <tr key={index}><td className="px-4 py-3"><select className="field min-w-64" value={item.product_id} onChange={(e) => chooseProduct(index, e.target.value)}>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {availableCartons(product)} available</option>)}</select>{selectedProduct && <div className="mt-1 text-xs text-slate-400">{Number(selectedProduct.stock_in_hand || 0).toLocaleString()} {packPlural(selectedProduct.package_type).toLowerCase()} in stock</div>}</td>{["quantity", "net_weight_per_carton", "gross_weight_per_carton", "client_price_per_carton", "customs_price_per_kg"].map((field) => <td key={field} className="px-4 py-3"><input className="field w-28" type="number" min="0" step="0.001" value={item[field]} onChange={(e) => updateItem(index, field, e.target.value)} /></td>)}<td className="px-4 py-3"><input type="checkbox" className="h-5 w-5 accent-forest-700" checked={item.is_sample} onChange={(e) => updateItem(index, "is_sample", e.target.checked)} /></td><td className="px-4 py-3"><button type="button" onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg p-2 text-red-500 hover:bg-red-50"><Trash2 size={17} /></button></td></tr>;
+              })}</tbody>
             </table>
           </div>
           {!items.length && <div className="py-12 text-center text-sm text-slate-400">Add at least one product line.</div>}
@@ -215,3 +218,15 @@ function TextField({ label, value, onChange, type = "text", required }) { return
 function SelectField({ label, value, onChange, options, required }) { return <label><span className="label">{label}</span><select className="field" required={required} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>; }
 function Summary({ label, value }) { return <div><div className="text-xs font-bold uppercase tracking-wide text-forest-600">{label}</div><div className="mt-1 text-lg font-bold text-forest-900">{value}</div></div>; }
 function orderMoney(value, currency) { return `${currency || "USD"} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
+function availableCartons(product) {
+  const packsPerCarton = Number(product.units_per_carton || 0);
+  if (!packsPerCarton) return "0 cartons";
+  const stock = Number(product.stock_in_hand || 0);
+  const cartons = Math.floor(stock / packsPerCarton);
+  const loose = stock - cartons * packsPerCarton;
+  return `${cartons.toLocaleString()} cartons${loose ? ` + ${loose.toLocaleString()} loose` : ""}`;
+}
+function packPlural(value) {
+  const pack = String(value || "pack");
+  return pack.endsWith("x") || pack.endsWith("ch") ? `${pack}es` : `${pack}s`;
+}

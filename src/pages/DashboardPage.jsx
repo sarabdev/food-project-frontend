@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowUpRight, Boxes, CircleDollarSign, FileCheck2, PackageCheck,
+  AlertTriangle, ArrowUpRight, Boxes, CircleDollarSign, FileCheck2, PackageCheck,
   Plus, RefreshCw, TrendingUp, UsersRound, WalletCards
 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
@@ -76,6 +76,13 @@ export function DashboardPage() {
 
       {loading ? <DashboardLoading /> : (
         <>
+          {Number(data.stats.low_stock_products || 0) > 0 && (
+            <Link to="/products" className="mb-5 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <AlertTriangle size={20} />
+              <span className="flex-1 font-semibold">{data.stats.low_stock_products} product{Number(data.stats.low_stock_products) === 1 ? "" : "s"} at or below the stock alert level.</span>
+              <span className="font-bold">View stock</span>
+            </Link>
+          )}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {cards.map(({ label, value, helper, icon: Icon, color }) => (
               <div key={label} className="panel p-5">
