@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import {
-  Boxes, ChevronRight, FileStack, LayoutDashboard, LogOut,
+  Boxes, ChevronRight, FileStack, LayoutDashboard, Landmark, LogOut,
   Menu, ShieldCheck, Truck, UserRoundCog, UsersRound, X
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -9,6 +9,7 @@ import { useAuth } from "../context/AuthContext";
 const navigation = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard.view", end: true },
   { to: "/orders", label: "Export Orders", icon: FileStack, permission: "orders.view" },
+  { to: "/ledger", label: "Party Ledger", icon: Landmark, permission: "ledger.view" },
   { to: "/products", label: "Products", icon: Boxes, permission: "products.view" },
   { to: "/parties", label: "Business Parties", icon: Truck, permission: "parties.view" },
   { to: "/users", label: "Users", icon: UsersRound, permission: "users.view" },
@@ -85,4 +86,3 @@ export function AppLayout({ children }) {
     </div>
   );
 }
-

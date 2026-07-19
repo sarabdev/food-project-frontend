@@ -10,6 +10,7 @@ import { RolesPage } from "./pages/RolesPage";
 import { OrdersPage } from "./pages/OrdersPage";
 import { OrderFormPage } from "./pages/OrderFormPage";
 import { OrderDetailsPage } from "./pages/OrderDetailsPage";
+import { LedgerPage } from "./pages/LedgerPage";
 
 function ProtectedApp() {
   const { user, loading } = useAuth();
@@ -26,6 +27,7 @@ function ProtectedApp() {
         <Route path="/orders/new" element={<OrderFormPage />} />
         <Route path="/orders/:id/edit" element={<OrderFormPage />} />
         <Route path="/orders/:id" element={<OrderDetailsPage />} />
+        <Route path="/ledger" element={<LedgerPage />} />
         <Route path="/products" element={<ProductsPage />} />
         <Route path="/parties" element={<PartiesPage />} />
         <Route path="/users" element={<UsersPage />} />

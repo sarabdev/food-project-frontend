@@ -59,6 +59,7 @@ export function OrderFormPage() {
     gross: sum.gross + Number(item.quantity || 0) * Number(item.gross_weight_per_carton || 0),
     value: sum.value + (item.is_sample ? 0 : Number(item.quantity || 0) * Number(item.client_price_per_carton || 0))
   }), { packages: 0, net: 0, gross: 0, value: 0 }), [items]);
+  const openingAdvance = totals.value * Number(form.advance_percentage || 0) / 100;
 
   function addItem() {
     if (!products[0]) return;
@@ -137,7 +138,7 @@ export function OrderFormPage() {
             </table>
           </div>
           {!items.length && <div className="py-12 text-center text-sm text-slate-400">Add at least one product line.</div>}
-          <div className="grid gap-3 border-t bg-forest-50 p-5 text-sm sm:grid-cols-2 lg:grid-cols-4"><Summary label="Packages" value={totals.packages.toLocaleString()} /><Summary label="Net weight" value={`${totals.net.toLocaleString()} kg`} /><Summary label="Gross weight" value={`${totals.gross.toLocaleString()} kg`} /><Summary label="Client value" value={`${form.currency} ${totals.value.toLocaleString()}`} /></div>
+          <div className="grid gap-3 border-t bg-forest-50 p-5 text-sm sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"><Summary label="Packages" value={totals.packages.toLocaleString()} /><Summary label="Net weight" value={`${totals.net.toLocaleString()} kg`} /><Summary label="Gross weight" value={`${totals.gross.toLocaleString()} kg`} /><Summary label="Order total" value={orderMoney(totals.value, form.currency)} /><Summary label={`Opening advance (${Number(form.advance_percentage || 0).toLocaleString()}%)`} value={orderMoney(openingAdvance, form.currency)} /><Summary label="Balance after advance" value={orderMoney(Math.max(0, totals.value - openingAdvance), form.currency)} /></div>
         </section>
         {error && <div className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
         <div className="mt-6 flex justify-end"><button disabled={saving || !items.length} className="btn-primary px-6"><Save size={18} /> {saving ? "Saving..." : isEditing ? "Update order" : "Save draft order"}</button></div>
@@ -213,3 +214,4 @@ function dateInputValue(value) {
 function TextField({ label, value, onChange, type = "text", required }) { return <label><span className="label">{label}</span><input className="field" required={required} type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.01" : undefined} value={value} onChange={(e) => onChange(e.target.value)} /></label>; }
 function SelectField({ label, value, onChange, options, required }) { return <label><span className="label">{label}</span><select className="field" required={required} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>; }
 function Summary({ label, value }) { return <div><div className="text-xs font-bold uppercase tracking-wide text-forest-600">{label}</div><div className="mt-1 text-lg font-bold text-forest-900">{value}</div></div>; }
+function orderMoney(value, currency) { return `${currency || "USD"} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
