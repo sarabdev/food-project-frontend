@@ -20,23 +20,30 @@ function ProtectedApp() {
     return <div className="grid min-h-screen place-items-center text-forest-700">Loading workspace...</div>;
   }
   if (!user) return <Navigate to="/login" replace />;
+  const gatePassOnly = user.permissions?.includes("gate_pass.view")
+    && !user.permissions?.includes("documents.preview")
+    && !user.permissions?.includes("orders.edit");
 
   return (
     <AppLayout>
       <Routes>
-        <Route path="/" element={<DashboardPage />} />
+        <Route path="/" element={user.permissions?.includes("dashboard.view") ? <DashboardPage /> : <Navigate to="/orders" replace />} />
         <Route path="/orders" element={<OrdersPage />} />
-        <Route path="/orders/new" element={<OrderFormPage />} />
-        <Route path="/orders/:id/edit" element={<OrderFormPage />} />
         <Route path="/orders/:id" element={<OrderDetailsPage />} />
-        <Route path="/ledger" element={<LedgerPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/products" element={<ProductsPage />} />
-        <Route path="/stock" element={<StockPage />} />
-        <Route path="/parties" element={<PartiesPage />} />
-        <Route path="/users" element={<UsersPage />} />
-        <Route path="/roles" element={<RolesPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {!gatePassOnly && (
+          <>
+            <Route path="/orders/new" element={<OrderFormPage />} />
+            <Route path="/orders/:id/edit" element={<OrderFormPage />} />
+            <Route path="/ledger" element={<LedgerPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/products" element={<ProductsPage />} />
+            <Route path="/stock" element={<StockPage />} />
+            <Route path="/parties" element={<PartiesPage />} />
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/roles" element={<RolesPage />} />
+          </>
+        )}
+        <Route path="*" element={<Navigate to={gatePassOnly ? "/orders" : "/"} replace />} />
       </Routes>
     </AppLayout>
   );

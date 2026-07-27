@@ -67,11 +67,15 @@ export function OrderDetailsPage() {
   const [gatePassError, setGatePassError] = useState("");
   const [gatePassSaving, setGatePassSaving] = useState(false);
   const { can } = useAuth();
+  const gatePassOnly = can("gate_pass.view") && !can("documents.preview") && !can("orders.edit");
+  const canEditGatePassPermission = can("orders.edit") || can("gate_pass.edit");
 
   useEffect(() => {
     api.get(`/orders/${id}`).then(({ data }) => setOrder(data.order));
-    api.get("/parties").then(({ data }) => setParties(data.parties));
-  }, [id]);
+    if (canEditGatePassPermission) {
+      api.get("/orders/gate-pass/options").then(({ data }) => setParties(data.parties));
+    }
+  }, [id, canEditGatePassPermission]);
 
   const totals = useMemo(() => order?.items.reduce((sum, item) => ({
     packages: sum.packages + Number(item.quantity),
@@ -84,7 +88,12 @@ export function OrderDetailsPage() {
   if (!order) return <div className="py-20 text-center text-slate-400">Loading order...</div>;
   const canEditOrder = can("orders.edit") && !["shipped", "completed", "cancelled"].includes(order.status);
   const canDeleteOrder = can("orders.delete") && !["shipped", "completed"].includes(order.status);
-  const clearingAgents = parties.filter((party) => party.party_type === "clearing_agent");
+  const canEditGatePass = canEditGatePassPermission && !["shipped", "completed", "cancelled"].includes(order.status);
+  const canViewGatePass = can("documents.preview") || can("gate_pass.view");
+  const canPrintGatePass = can("documents.print") || can("gate_pass.print");
+  const canPrintDocument = preview?.[0] === "gate_pass" ? canPrintGatePass : can("documents.print");
+  const clearingAgents = parties;
+  const gatePassDocument = documents.find((document) => document[0] === "gate_pass");
   const hasGatePassInfo = Boolean(order.truck_number || order.driver_name || order.driver_phone || order.transporter_name || order.transporter_contact || order.transporter_phone || order.clearing_agent_id || sealList(order.seal_numbers).length);
 
   async function openPreview(document) {
@@ -163,6 +172,33 @@ export function OrderDetailsPage() {
         description={`${order.client_name} - ${new Date(order.contract_date).toLocaleDateString()}`}
         action={<div className="flex flex-wrap items-center gap-3">{canEditOrder && <Link to={`/orders/${order.id}/edit`} className="btn-secondary"><Edit3 size={18} /> Edit order</Link>}{canDeleteOrder && <button type="button" onClick={deleteOrder} className="btn-secondary text-red-600 hover:text-red-700"><Trash2 size={18} /> Delete order</button>}<StatusBadge status={order.status} /></div>}
       />
+      {gatePassOnly ? (
+        <section className="panel mx-auto max-w-3xl p-6 md:p-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-forest-50 text-forest-700"><Truck size={22} /></div>
+              <div>
+                <h2 className="text-lg font-bold">Gate pass</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {hasGatePassInfo ? "Vehicle, driver and seal information has been entered." : "Complete the vehicle, driver and seal information before printing."}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {canEditGatePass && (
+                <button type="button" onClick={openGatePassForm} className="btn-secondary">
+                  <Truck size={18} /> {hasGatePassInfo ? "Update info" : "Fill info"}
+                </button>
+              )}
+              {canViewGatePass && (
+                <button type="button" onClick={() => openPreview(gatePassDocument)} className="btn-primary">
+                  <FileText size={18} /> Preview / Print
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+      ) : (
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           <section className="panel p-5 md:p-7">
@@ -203,7 +239,7 @@ export function OrderDetailsPage() {
               </table>
             </div>
           </section>
-          {canEditOrder && (
+          {canEditGatePass && (
             <section className="panel flex flex-wrap items-center justify-between gap-4 p-5 md:p-6">
               <div className="flex items-start gap-4">
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-forest-50 text-forest-700"><Truck size={20} /></div>
@@ -217,7 +253,7 @@ export function OrderDetailsPage() {
               </button>
             </section>
           )}
-          <section>
+          {can("documents.preview") && <section>
             <h2 className="mb-4 text-lg font-bold">Documents</h2>
             <div className="grid gap-4 md:grid-cols-2">
               {documents.map((document) => (
@@ -227,13 +263,14 @@ export function OrderDetailsPage() {
                 </button>
               ))}
             </div>
-          </section>
+          </section>}
         </div>
         <aside className="space-y-4">
           <div className="panel p-6"><h2 className="mb-5 font-bold">Calculated totals</h2><div className="space-y-4"><Info label="Total packages" value={totals.packages.toLocaleString()} /><Info label="Net weight" value={`${totals.net.toLocaleString()} kg`} /><Info label="Gross weight" value={`${totals.gross.toLocaleString()} kg`} /><Info label="Client invoice value" value={`${order.currency} ${totals.client.toLocaleString()}`} /><Info label="Customs invoice value" value={`${order.currency} ${totals.customs.toLocaleString()}`} /></div></div>
           <div className="rounded-2xl bg-forest-900 p-6 text-white"><div className="text-xs font-bold uppercase tracking-widest text-gold">Document rule</div><p className="mt-3 text-sm leading-6 text-white/65">Samples are included in package and weight totals, but excluded from both commercial invoice values.</p></div>
         </aside>
       </div>
+      )}
       <Modal open={Boolean(preview)} title={preview?.[1]} onClose={() => setPreview(null)} wide>
         {preview?.[0] === "sale_contract" ? (
           <SalesContractDocument order={order} />
@@ -250,7 +287,7 @@ export function OrderDetailsPage() {
         ) : (
           <GenericDocumentPreview order={order} preview={preview} />
         )}
-        <div className="no-print mt-5 flex justify-end"><button onClick={printDocument} className="btn-primary"><Printer size={18} /> Print document</button></div>
+        {canPrintDocument && <div className="no-print mt-5 flex justify-end"><button onClick={printDocument} className="btn-primary"><Printer size={18} /> Print document</button></div>}
       </Modal>
       <Modal open={gatePassOpen} title="Gate pass info" onClose={() => setGatePassOpen(false)} wide>
         <form onSubmit={saveGatePass}>
