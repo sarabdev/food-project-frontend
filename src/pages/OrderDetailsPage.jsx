@@ -596,7 +596,7 @@ function CommercialInvoiceDocument({ order, documentType }) {
       <header className="invoice-brand"><img src="/brand/za-header.png" alt="Z.A Food Industries" /></header>
       <section className="invoice-top">
         <div className="invoice-applicant">
-          <strong>Applicant</strong>
+          <strong>{isCustoms ? "Consignee" : "Applicant"}</strong>
           <span>{consignee.name || "-"}</span>
           <span>{formatAddress(consignee.address, consignee.city, consignee.country)}</span>
         </div>

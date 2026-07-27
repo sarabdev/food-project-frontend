@@ -6,11 +6,12 @@ import { api, assetUrl, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
 const packageTypes = ["Jar", "Pouch", "Box"];
+const today = new Date().toLocaleDateString("en-CA");
 
 const emptyProduct = {
   sku: "", name: "", description: "", hs_code: "", package_type: "Jar",
   units_per_carton: 0, pieces_per_unit: 0, packaging_details: {}, unit_weight_grams: 0,
-  stock_in_hand: 0, low_stock_alert: 0,
+  stock_in_hand: 0, opening_stock_date: today, low_stock_alert: 0,
   net_weight_per_carton: 0, gross_weight_per_carton: 0,
   default_client_price: 0, default_customs_price_per_kg: 0, image_url: ""
 };
@@ -114,23 +115,34 @@ export function ProductsPage() {
             <NumberField label="Per-piece weight (grams)" field="unit_weight_grams" form={form} setForm={setForm} />
             <NumberField label={`Pieces per ${form.package_type.toLowerCase()}`} field="pieces_per_unit" form={form} setForm={setForm} />
             <NumberField label={`${pluralize(form.package_type)} per carton`} field="units_per_carton" form={form} setForm={setForm} />
-            <div className="md:col-span-2 mt-1 border-t border-slate-200 pt-5">
-              <div className="mb-4">
-                <h3 className="font-bold">Stock</h3>
-                <p className="text-xs text-slate-500">Stock is recorded in {pluralize(form.package_type).toLowerCase()} and converted to cartons automatically.</p>
+            {!editing ? (
+              <>
+                <div className="md:col-span-2 mt-1 border-t border-slate-200 pt-5">
+                  <div className="mb-4">
+                    <h3 className="font-bold">Opening stock</h3>
+                    <p className="text-xs text-slate-500">After product creation, these values are updated only through dated Restock entries in the Stock Ledger.</p>
+                  </div>
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <NumberField label={`Opening stock (${pluralize(form.package_type).toLowerCase()})`} field="stock_in_hand" form={form} setForm={setForm} />
+                    <Field label="Opening stock date">
+                      <input className="field" type="date" required value={form.opening_stock_date} onChange={(e) => setForm({ ...form, opening_stock_date: e.target.value })} />
+                    </Field>
+                    <NumberField label={`Low-stock alert (${pluralize(form.package_type).toLowerCase()})`} field="low_stock_alert" form={form} setForm={setForm} />
+                  </div>
+                  <div className="mt-4 rounded-xl bg-forest-50 p-4 text-sm text-forest-900">
+                    <span className="font-semibold">Available cartons: </span>{stockCartonSummary(form)}
+                  </div>
+                </div>
+                <NumberField label="Net weight/carton (kg)" field="net_weight_per_carton" form={form} setForm={setForm} />
+                <NumberField label="Gross weight/carton (kg)" field="gross_weight_per_carton" form={form} setForm={setForm} />
+                <NumberField label="Client price/carton" field="default_client_price" form={form} setForm={setForm} />
+                <NumberField label="Customs price/kg" field="default_customs_price_per_kg" form={form} setForm={setForm} />
+              </>
+            ) : (
+              <div className="md:col-span-2 rounded-xl border border-forest-100 bg-forest-50 p-4 text-sm text-forest-900">
+                Stock balance, low-stock alert, carton weights and prices are managed through dated Restock entries in the Stock Ledger.
               </div>
-              <div className="grid gap-5 md:grid-cols-2">
-                <NumberField label={`Stock in hand (${pluralize(form.package_type).toLowerCase()})`} field="stock_in_hand" form={form} setForm={setForm} />
-                <NumberField label={`Low-stock alert (${pluralize(form.package_type).toLowerCase()})`} field="low_stock_alert" form={form} setForm={setForm} />
-              </div>
-              <div className="mt-4 rounded-xl bg-forest-50 p-4 text-sm text-forest-900">
-                <span className="font-semibold">Available cartons: </span>{stockCartonSummary(form)}
-              </div>
-            </div>
-            <NumberField label="Net weight/carton (kg)" field="net_weight_per_carton" form={form} setForm={setForm} />
-            <NumberField label="Gross weight/carton (kg)" field="gross_weight_per_carton" form={form} setForm={setForm} />
-            <NumberField label="Client price/carton" field="default_client_price" form={form} setForm={setForm} />
-            <NumberField label="Customs price/kg" field="default_customs_price_per_kg" form={form} setForm={setForm} />
+            )}
             <Field label="Product image">
               <input
                 className="field"

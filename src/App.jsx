@@ -12,6 +12,7 @@ import { OrderFormPage } from "./pages/OrderFormPage";
 import { OrderDetailsPage } from "./pages/OrderDetailsPage";
 import { LedgerPage } from "./pages/LedgerPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { StockPage } from "./pages/StockPage";
 
 function ProtectedApp() {
   const { user, loading } = useAuth();
@@ -31,6 +32,7 @@ function ProtectedApp() {
         <Route path="/ledger" element={<LedgerPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/products" element={<ProductsPage />} />
+        <Route path="/stock" element={<StockPage />} />
         <Route path="/parties" element={<PartiesPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/roles" element={<RolesPage />} />

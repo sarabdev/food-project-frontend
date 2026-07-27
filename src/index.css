@@ -88,6 +88,14 @@
     width: 100% !important;
   }
 
+  .report-print .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  .report-print table {
+    min-width: 0 !important;
+  }
+
   body {
     background: white;
   }
