@@ -43,13 +43,21 @@
 }
 
 @media print {
+  body.printing-document > #root {
+    display: none !important;
+  }
+
+  body.printing-document > .document-print-root {
+    display: block !important;
+  }
+
   .no-print {
     display: none !important;
   }
 
   @page {
     size: A4;
-    margin: 0;
+    margin: 4mm;
   }
 
   body * {
@@ -66,8 +74,9 @@
   .print-document {
     left: 0 !important;
     margin: 0 !important;
-    position: fixed !important;
+    position: absolute !important;
     top: 0 !important;
+    zoom: var(--document-print-scale, 0.96);
   }
 
   .report-print {
@@ -82,6 +91,10 @@
   body {
     background: white;
   }
+}
+
+.document-print-root {
+  display: none;
 }
 
 .sale-contract-sheet {
@@ -254,19 +267,24 @@
   font-weight: 800;
 }
 
-.sale-product-table .col-serial { width: 6mm; }
-.sale-product-table .col-product { width: 31mm; }
-.sale-product-table .col-container { width: 22mm; }
-.sale-product-table .col-image { width: 23mm; }
-.sale-product-table .col-pc-weight { width: 12mm; }
-.sale-product-table .col-pieces { width: 13mm; }
-.sale-product-table .col-jarbox { width: 15mm; }
-.sale-product-table .col-pkg { width: 13mm; }
-.sale-product-table .col-net { width: 14mm; }
-.sale-product-table .col-gross { width: 14mm; }
-.sale-product-table .col-qty { width: 14mm; }
-.sale-product-table .col-price { width: 17mm; }
-.sale-product-table .col-total { width: 19mm; }
+.sale-product-table .col-serial { width: 2.8%; }
+.sale-product-table .col-product { width: 14.6%; }
+.sale-product-table .col-container { width: 10.3%; }
+.sale-product-table .col-image { width: 10.8%; }
+.sale-product-table .col-pc-weight { width: 5.6%; }
+.sale-product-table .col-pieces { width: 6.1%; }
+.sale-product-table .col-jarbox { width: 7%; }
+.sale-product-table .col-pkg { width: 6.1%; }
+.sale-product-table .col-net { width: 6.6%; }
+.sale-product-table .col-gross { width: 6.6%; }
+.sale-product-table .col-qty { width: 6.6%; }
+.sale-product-table .col-price { width: 8%; }
+.sale-product-table .col-total { width: 8.9%; }
+
+.sale-product-table th,
+.sale-product-table td {
+  overflow-wrap: anywhere;
+}
 
 .sale-product-table tbody tr {
   min-height: 18mm;
@@ -280,11 +298,13 @@
 .product-image-cell img,
 .product-image-empty {
   border: 1px solid #ddd;
+  box-sizing: border-box;
   display: block;
   height: 18mm;
   margin: 0 auto;
+  max-width: 20mm;
   object-fit: cover;
-  width: 22mm;
+  width: 100%;
 }
 
 .product-image-empty {
@@ -764,16 +784,16 @@
   text-align: center;
 }
 
-.invoice-table .invoice-col-qty { width: 25mm; }
-.invoice-table .invoice-col-desc { width: 91mm; }
-.invoice-table .invoice-col-kgs { width: 22mm; }
-.invoice-table .invoice-col-rate { width: 36mm; }
-.invoice-table .invoice-col-value { width: 28mm; }
+.invoice-table .invoice-col-qty { width: 12.4%; }
+.invoice-table .invoice-col-desc { width: 45%; }
+.invoice-table .invoice-col-kgs { width: 10.9%; }
+.invoice-table .invoice-col-rate { width: 17.8%; }
+.invoice-table .invoice-col-value { width: 13.9%; }
 
-.invoice-table-client .invoice-col-qty { width: 25mm; }
-.invoice-table-client .invoice-col-desc { width: 104mm; }
-.invoice-table-client .invoice-col-rate { width: 38mm; }
-.invoice-table-client .invoice-col-value { width: 35mm; }
+.invoice-table-client .invoice-col-qty { width: 12.4%; }
+.invoice-table-client .invoice-col-desc { width: 51.5%; }
+.invoice-table-client .invoice-col-rate { width: 18.8%; }
+.invoice-table-client .invoice-col-value { width: 17.3%; }
 
 .invoice-table th:nth-child(2),
 .invoice-table .invoice-description {

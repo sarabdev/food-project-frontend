@@ -119,6 +119,33 @@ export function OrderDetailsPage() {
 
   async function printDocument() {
     await api.post(`/orders/${id}/document-audit`, { document_type: preview[0], action_name: "printed" });
+
+    document.querySelectorAll(".document-print-root").forEach((element) => element.remove());
+
+    const printableDocument = document.querySelector(".print-document");
+    if (!printableDocument) return;
+
+    const millimetersToPixels = 96 / 25.4;
+    const printableWidth = 202 * millimetersToPixels;
+    const printableHeight = 289 * millimetersToPixels;
+    const documentWidth = Math.max(printableDocument.scrollWidth, printableDocument.offsetWidth);
+    const documentHeight = Math.max(printableDocument.scrollHeight, printableDocument.offsetHeight);
+    const printScale = Math.min(printableWidth / documentWidth, printableHeight / documentHeight, 1);
+
+    const printRoot = document.createElement("div");
+    printRoot.className = "document-print-root";
+    const clonedDocument = printableDocument.cloneNode(true);
+    clonedDocument.style.setProperty("--document-print-scale", String(printScale));
+    printRoot.appendChild(clonedDocument);
+    document.body.appendChild(printRoot);
+    document.body.classList.add("printing-document");
+
+    const cleanupPrintRoot = () => {
+      document.body.classList.remove("printing-document");
+      printRoot.remove();
+    };
+
+    window.addEventListener("afterprint", cleanupPrintRoot, { once: true });
     window.print();
   }
 
