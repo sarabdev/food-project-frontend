@@ -1294,14 +1294,14 @@
   min-height: 41mm;
 }
 
-.bl-port-grid > div:first-child {
-  display: grid;
-  grid-template-rows: 1fr 12mm;
-}
+.bl-port-grid > div {
+    display: grid;
+    grid-template-rows: 1fr 12mm;
+  }
 
-.bl-port-grid > .bl-block {
-  border-left: 1px solid #e5e5e5;
-}
+.bl-port-grid > div:last-child {
+    border-left: 1px solid #e5e5e5;
+  }
 
 .bl-body-grid {
   grid-template-columns: 33mm 1fr 60mm;

@@ -204,6 +204,11 @@ export function OrderDetailsPage({ entityType = "orders" }) {
               {isShipment
                 ? <Info label={order.containers?.length > 1 ? "Containers" : "Container"} value={order.containers?.length ? order.containers.map((container) => `${container.container_number}${container.container_type ? ` (${container.container_type})` : ""}`).join(", ") : [order.container_number, order.container_type].filter(Boolean).join(" / ") || "Not assigned"} />
                 : <Info label="Valid until" value={order.valid_until ? new Date(order.valid_until).toLocaleDateString() : "Not specified"} />}
+              {isShipment && <Info label="G.D. No." value={order.gd_number || "Not entered"} />}
+              {isShipment && <Info label="FI No." value={order.fi_number || "Not entered"} />}
+              {isShipment && <Info label="Vessel / Voyage" value={[order.vessel_name, order.voyage_number].filter(Boolean).join(" / ") || "Not entered"} />}
+              {isShipment && <Info label="B/L No. / Date" value={[order.bl_number, order.bl_date ? new Date(order.bl_date).toLocaleDateString() : ""].filter(Boolean).join(" / ") || "Not entered"} />}
+              {isShipment && <Info label="Also notify party" value={order.also_notify_party_name || "Not selected"} />}
             </div>
           </section>
           <section className="panel overflow-hidden">
@@ -432,10 +437,16 @@ function BLInstructionsDocument({ order, totals }) {
             <span>{order.port_of_loading || "KARACHI, PAKISTAN"}</span>
           </BLBlock>
         </div>
-        <BLBlock title="Port of Discharge">
-          <span>{order.port_of_destination || "-"}</span>
-          <span>{order.final_destination || ""}</span>
-        </BLBlock>
+        <div>
+          <BLBlock title="Also Notify Party:">
+            <strong>{order.also_notify_party_name || "-"}</strong>
+            <span>{formatAddress(order.also_notify_party_address, order.also_notify_party_city, order.also_notify_party_country)}</span>
+          </BLBlock>
+          <BLBlock title="Port of Discharge">
+            <span>{order.port_of_destination || "-"}</span>
+            <span>{order.final_destination || ""}</span>
+          </BLBlock>
+        </div>
       </section>
 
       <section className="bl-body-grid">
@@ -452,10 +463,10 @@ function BLInstructionsDocument({ order, totals }) {
             </div>
           ))}
           <div className="bl-reference">
-            <span><strong>G.D NO.</strong></span>
+            <span><strong>G.D NO.</strong>&nbsp;&nbsp;{order.gd_number || "-"}</span>
+            <span><strong>FI NO.</strong>&nbsp;&nbsp;{order.fi_number || "-"}</span>
             <span><strong>Export Reference:</strong>&nbsp;&nbsp;{order.invoice_number}</span>
           </div>
-          <div className="bl-transit-note">Intransit to NIGERIA - onward carriage from Cotonou to Nigeria<br />is arranged by Merchant for account and risk of Merchant.</div>
           <div className="bl-free-days">
             <strong>PLZ ALSO MENTION FREE DAYS TIME AT THE DESTINATION</strong>
             <span>SHIPMENT MAY ONLY BE RELEASED WITH THE PRESENTATION OF</span>
@@ -638,7 +649,7 @@ function CommercialInvoiceDocument({ order, documentType }) {
           <span>{consignee.name || "-"}</span>
           <span>{formatAddress(consignee.address, consignee.city, consignee.country)}</span>
         </div>
-        <div className="invoice-gd">G.D NO.</div>
+        <div className="invoice-gd"><strong>G.D NO.</strong> {order.gd_number || "-"}<br /><strong>FI NO.</strong> {order.fi_number || "-"}</div>
         <div className="invoice-title-block">
           <h1>COMMERCIAL INVOICE</h1>
           <InfoRows rows={[
@@ -810,7 +821,7 @@ function PackingWeightListDocument({ order, documentType }) {
           <span>{consignee.name || "-"}</span>
           <span>{formatAddress(consignee.address, consignee.city, consignee.country)}</span>
         </div>
-        <div className="packing-gd">G.D NO.</div>
+        <div className="packing-gd"><strong>G.D NO.</strong> {order.gd_number || "-"}<br /><strong>FI NO.</strong> {order.fi_number || "-"}</div>
         <div className="packing-title-block">
           <h1>{isClientPackingList ? "PACKING LIST" : "PACKING / WEIGHT LIST"}</h1>
           <InfoRows rows={[

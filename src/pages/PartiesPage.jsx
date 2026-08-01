@@ -8,6 +8,7 @@ import { useAuth } from "../context/AuthContext";
 const types = {
   client: "Client",
   customs_consignee: "Customs Consignee",
+  notify_party: "Notify Party",
   clearing_agent: "Clearing Agent"
 };
 const empty = { party_type: "client", name: "", contact_person: "", business_id: "", phone: "", email: "", address_line_1: "", address_line_2: "", city: "", state_region: "", country: "", postal_code: "" };

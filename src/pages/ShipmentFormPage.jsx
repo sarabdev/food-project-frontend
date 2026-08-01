@@ -6,9 +6,12 @@ import { api, messageFromError } from "../lib/api";
 
 const today = new Date().toISOString().slice(0, 10);
 const initialForm = {
-  client_id: "", customs_consignee_id: "", shipment_date: today, currency: "USD",
+  client_id: "", customs_consignee_id: "", also_notify_party_id: "", shipment_date: today, currency: "USD",
+  gd_number: "", fi_number: "",
   port_of_loading: "Karachi, Pakistan", port_of_destination: "", final_destination: "",
-  shipping_type: "CAF", shipped_per: "By Sea", freight_term: "Freight Prepaid", notes: ""
+  shipping_type: "CAF", shipped_per: "By Sea", vessel_name: "", voyage_number: "",
+  bl_number: "", bl_date: "",
+  freight_term: "Freight Prepaid", notes: ""
 };
 const emptyContainer = { container_number: "", container_type: "40 HC", cbm: 0 };
 
@@ -72,13 +75,20 @@ export function ShipmentFormPage() {
         setForm({
           client_id: String(shipment.client_id),
           customs_consignee_id: String(shipment.customs_consignee_id),
+          also_notify_party_id: shipment.also_notify_party_id ? String(shipment.also_notify_party_id) : "",
           shipment_date: String(shipment.shipment_date || shipment.contract_date).slice(0, 10),
+          gd_number: shipment.gd_number || "",
+          fi_number: shipment.fi_number || "",
           currency: shipment.currency || "USD",
           port_of_loading: shipment.port_of_loading || "",
           port_of_destination: shipment.port_of_destination || "",
           final_destination: shipment.final_destination || "",
           shipping_type: shipment.shipping_type || "",
           shipped_per: shipment.shipped_per || "",
+          vessel_name: shipment.vessel_name || "",
+          voyage_number: shipment.voyage_number || "",
+          bl_number: shipment.bl_number || "",
+          bl_date: shipment.bl_date ? String(shipment.bl_date).slice(0, 10) : "",
           freight_term: shipment.freight_term || "",
           notes: shipment.notes || ""
         });
@@ -97,6 +107,7 @@ export function ShipmentFormPage() {
 
   const clients = parties.filter((party) => party.party_type === "client");
   const consignees = parties.filter((party) => party.party_type === "customs_consignee");
+  const notifyParties = parties.filter((party) => party.party_type === "notify_party");
   const allocations = useMemo(() => lines.flatMap((line) => containers.map((_, containerIndex) => ({
     export_order_item_id: line.export_order_item_id,
     container_index: containerIndex,
@@ -176,11 +187,18 @@ export function ShipmentFormPage() {
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             <SelectField label="Actual client" value={form.client_id} onChange={(value) => setForm({ ...form, client_id: value })} options={clients} required disabled={isEditing} />
             <SelectField label="Customs / B/L consignee" value={form.customs_consignee_id} onChange={(value) => setForm({ ...form, customs_consignee_id: value })} options={consignees} required />
+            <SelectField label="Also notify party" value={form.also_notify_party_id} onChange={(value) => setForm({ ...form, also_notify_party_id: value })} options={notifyParties} />
             <TextField label="Document date" type="date" value={form.shipment_date} onChange={(value) => setForm({ ...form, shipment_date: value })} required />
+            <TextField label="G.D. No." value={form.gd_number} onChange={(value) => setForm({ ...form, gd_number: value })} />
+            <TextField label="FI No." value={form.fi_number} onChange={(value) => setForm({ ...form, fi_number: value })} />
             <TextField label="Port of loading" value={form.port_of_loading} onChange={(value) => setForm({ ...form, port_of_loading: value })} />
             <TextField label="Port of destination" value={form.port_of_destination} onChange={(value) => setForm({ ...form, port_of_destination: value })} />
             <TextField label="Final destination" value={form.final_destination} onChange={(value) => setForm({ ...form, final_destination: value })} />
             <TextField label="Shipped per" value={form.shipped_per} onChange={(value) => setForm({ ...form, shipped_per: value })} />
+            <TextField label="Vessel name" value={form.vessel_name} onChange={(value) => setForm({ ...form, vessel_name: value })} />
+            <TextField label="Voyage number" value={form.voyage_number} onChange={(value) => setForm({ ...form, voyage_number: value })} />
+            <TextField label="B/L No." value={form.bl_number} onChange={(value) => setForm({ ...form, bl_number: value })} />
+            <TextField label="B/L Date" type="date" value={form.bl_date} onChange={(value) => setForm({ ...form, bl_date: value })} />
           </div>
         </section>
 
