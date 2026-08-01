@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
+import { QuickAddPartyModal } from "../components/QuickAddPartyModal";
 import { api, messageFromError } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 
 const today = new Date().toISOString().slice(0, 10);
 const emptyOrder = {
@@ -23,7 +25,9 @@ export function OrderFormPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [quickAddType, setQuickAddType] = useState(null);
   const navigate = useNavigate();
+  const { can } = useAuth();
   const { id } = useParams();
   const isEditing = Boolean(id);
 
@@ -76,6 +80,15 @@ export function OrderFormPage() {
     setItems(items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item));
   }
 
+  function partyCreated(party) {
+    setParties((current) => [...current, party].sort((left, right) => left.name.localeCompare(right.name)));
+    setForm((current) => ({
+      ...current,
+      [party.party_type === "client" ? "client_id" : "customs_consignee_id"]: party.id
+    }));
+    setQuickAddType(null);
+  }
+
   async function save(event) {
     event.preventDefault();
     setSaving(true);
@@ -113,8 +126,8 @@ export function OrderFormPage() {
         <section className="panel p-5 md:p-7">
           <h2 className="mb-5 font-bold">Contract and expected shipping details</h2>
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-            <SelectField label="Actual client" value={form.client_id} onChange={(value) => setForm({ ...form, client_id: value })} options={clients} required />
-            <SelectField label="Customs / B/L consignee" value={form.customs_consignee_id} onChange={(value) => setForm({ ...form, customs_consignee_id: value })} options={consignees} required />
+            <SelectField label="Actual client" value={form.client_id} onChange={(value) => setForm({ ...form, client_id: value })} options={clients} required onAdd={can("parties.create") ? () => setQuickAddType("client") : null} addLabel="Add client" />
+            <SelectField label="Customs / B/L consignee" value={form.customs_consignee_id} onChange={(value) => setForm({ ...form, customs_consignee_id: value })} options={consignees} required onAdd={can("parties.create") ? () => setQuickAddType("customs_consignee") : null} addLabel="Add consignee" />
             <TextField label="Contract date" type="date" value={form.contract_date} onChange={(value) => setForm({ ...form, contract_date: value })} required />
             <TextField label="Valid until" type="date" value={form.valid_until} onChange={(value) => setForm({ ...form, valid_until: value })} />
             <TextField label="Port of loading" value={form.port_of_loading} onChange={(value) => setForm({ ...form, port_of_loading: value })} />
@@ -146,6 +159,7 @@ export function OrderFormPage() {
         <div className="mt-6 flex justify-end"><button disabled={saving || !items.length} className="btn-primary px-6"><Save size={18} /> {saving ? "Saving..." : isEditing ? "Update contract" : "Save draft contract"}</button></div>
       </form>
       )}
+      <QuickAddPartyModal open={Boolean(quickAddType)} partyType={quickAddType || "client"} onClose={() => setQuickAddType(null)} onCreated={partyCreated} />
     </>
   );
 }
@@ -214,6 +228,9 @@ function dateInputValue(value) {
 }
 
 function TextField({ label, value, onChange, type = "text", required }) { return <label><span className="label">{label}</span><input className="field" required={required} type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.01" : undefined} value={value} onChange={(e) => onChange(e.target.value)} /></label>; }
-function SelectField({ label, value, onChange, options, required }) { return <label><span className="label">{label}</span><select className="field" required={required} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>; }
+function SelectField({ label, value, onChange, options, required, onAdd, addLabel }) {
+  const inputId = `contract-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  return <div><div className="label flex items-center justify-between gap-2"><label htmlFor={inputId}>{label}</label>{onAdd && <button type="button" className="inline-flex items-center gap-1 font-semibold normal-case tracking-normal text-forest-700 hover:text-forest-900" onClick={onAdd}><Plus size={15} /> {addLabel}</button>}</div><select id={inputId} className="field" required={required} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>;
+}
 function Summary({ label, value }) { return <div><div className="text-xs font-bold uppercase tracking-wide text-forest-600">{label}</div><div className="mt-1 text-lg font-bold text-forest-900">{value}</div></div>; }
 function orderMoney(value, currency) { return `${currency || "USD"} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }

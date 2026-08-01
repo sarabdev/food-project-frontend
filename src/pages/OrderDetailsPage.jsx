@@ -842,7 +842,6 @@ function PackingWeightListDocument({ order, documentType }) {
 
       <section className="packing-origin">
         <strong>"This is to Certify that Goods are of Pakistan Origin."</strong>
-        <span>(Rebate claim will be filed as per customs lab report under relevant export rebate claim)</span>
       </section>
 
       {isClientPackingList && (
