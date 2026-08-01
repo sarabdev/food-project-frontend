@@ -12,7 +12,8 @@ import { OrderFormPage } from "./pages/OrderFormPage";
 import { OrderDetailsPage } from "./pages/OrderDetailsPage";
 import { LedgerPage } from "./pages/LedgerPage";
 import { ReportsPage } from "./pages/ReportsPage";
-import { StockPage } from "./pages/StockPage";
+import { ShipmentsPage } from "./pages/ShipmentsPage";
+import { ShipmentFormPage } from "./pages/ShipmentFormPage";
 
 function ProtectedApp() {
   const { user, loading } = useAuth();
@@ -27,23 +28,25 @@ function ProtectedApp() {
   return (
     <AppLayout>
       <Routes>
-        <Route path="/" element={user.permissions?.includes("dashboard.view") ? <DashboardPage /> : <Navigate to="/orders" replace />} />
+        <Route path="/" element={user.permissions?.includes("dashboard.view") ? <DashboardPage /> : <Navigate to={gatePassOnly ? "/shipments" : "/orders"} replace />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/orders/:id" element={<OrderDetailsPage />} />
+        <Route path="/shipments" element={<ShipmentsPage />} />
+        <Route path="/shipments/:id" element={<OrderDetailsPage entityType="shipments" />} />
         {!gatePassOnly && (
           <>
             <Route path="/orders/new" element={<OrderFormPage />} />
             <Route path="/orders/:id/edit" element={<OrderFormPage />} />
+            <Route path="/shipments/new" element={<ShipmentFormPage />} />
             <Route path="/ledger" element={<LedgerPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/products" element={<ProductsPage />} />
-            <Route path="/stock" element={<StockPage />} />
             <Route path="/parties" element={<PartiesPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/roles" element={<RolesPage />} />
           </>
         )}
-        <Route path="*" element={<Navigate to={gatePassOnly ? "/orders" : "/"} replace />} />
+        <Route path="*" element={<Navigate to={gatePassOnly ? "/shipments" : "/"} replace />} />
       </Routes>
     </AppLayout>
   );

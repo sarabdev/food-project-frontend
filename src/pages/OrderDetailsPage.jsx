@@ -39,7 +39,7 @@ const company = {
     "Bank commission, deduction and handling charges with the buyer value without.",
     "All outside Pakistan charges on buyers account.",
     "Insurance: buyer is strongly recommended to cover insurance at his own.",
-    "Stock payment to be transferred for each order proceeding."
+    "Advance payment to be transferred according to the agreed terms."
   ]
 };
 
@@ -56,7 +56,7 @@ const emptyGatePass = {
   seal_numbers: ""
 };
 
-export function OrderDetailsPage() {
+export function OrderDetailsPage({ entityType = "orders" }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
@@ -67,15 +67,20 @@ export function OrderDetailsPage() {
   const [gatePassError, setGatePassError] = useState("");
   const [gatePassSaving, setGatePassSaving] = useState(false);
   const { can } = useAuth();
+  const isShipment = entityType === "shipments";
+  const endpoint = `/${entityType}/${id}`;
+  const availableDocuments = isShipment
+    ? documents.filter((document) => document[0] !== "sale_contract")
+    : documents.filter((document) => document[0] === "sale_contract");
   const gatePassOnly = can("gate_pass.view") && !can("documents.preview") && !can("orders.edit");
   const canEditGatePassPermission = can("orders.edit") || can("gate_pass.edit");
 
   useEffect(() => {
-    api.get(`/orders/${id}`).then(({ data }) => setOrder(data.order));
+    api.get(endpoint).then(({ data }) => setOrder(data.order || data.shipment));
     if (canEditGatePassPermission) {
       api.get("/orders/gate-pass/options").then(({ data }) => setParties(data.parties));
     }
-  }, [id, canEditGatePassPermission]);
+  }, [endpoint, canEditGatePassPermission]);
 
   const totals = useMemo(() => order?.items.reduce((sum, item) => ({
     packages: sum.packages + Number(item.quantity),
@@ -86,8 +91,8 @@ export function OrderDetailsPage() {
   }), { packages: 0, net: 0, gross: 0, client: 0, customs: 0 }), [order]);
 
   if (!order) return <div className="py-20 text-center text-slate-400">Loading order...</div>;
-  const canEditOrder = can("orders.edit") && !["shipped", "completed", "cancelled"].includes(order.status);
-  const canDeleteOrder = can("orders.delete") && !["shipped", "completed"].includes(order.status);
+  const canEditOrder = !isShipment && can("orders.edit") && !["shipped", "completed", "cancelled"].includes(order.status);
+  const canDeleteOrder = !isShipment && can("orders.delete") && !["shipped", "completed"].includes(order.status);
   const canEditGatePass = canEditGatePassPermission && !["shipped", "completed", "cancelled"].includes(order.status);
   const canViewGatePass = can("documents.preview") || can("gate_pass.view");
   const canPrintGatePass = can("documents.print") || can("gate_pass.print");
@@ -98,7 +103,7 @@ export function OrderDetailsPage() {
 
   async function openPreview(document) {
     setPreview(document);
-    await api.post(`/orders/${id}/document-audit`, { document_type: document[0], action_name: "previewed" });
+    await api.post(`${endpoint}/document-audit`, { document_type: document[0], action_name: "previewed" });
   }
 
   function openGatePassForm() {
@@ -112,12 +117,12 @@ export function OrderDetailsPage() {
     setGatePassSaving(true);
     setGatePassError("");
     try {
-      await api.patch(`/orders/${id}/gate-pass`, {
+      await api.patch(`${endpoint}/gate-pass`, {
         ...gatePassForm,
         seal_numbers: gatePassForm.seal_numbers.split(/\r?\n|,/).map((seal) => seal.trim()).filter(Boolean)
       });
-      const { data } = await api.get(`/orders/${id}`);
-      setOrder(data.order);
+      const { data } = await api.get(endpoint);
+      setOrder(data.order || data.shipment);
       setGatePassOpen(false);
     } catch (requestError) {
       setGatePassError(messageFromError(requestError));
@@ -127,7 +132,7 @@ export function OrderDetailsPage() {
   }
 
   async function printDocument() {
-    await api.post(`/orders/${id}/document-audit`, { document_type: preview[0], action_name: "printed" });
+    await api.post(`${endpoint}/document-audit`, { document_type: preview[0], action_name: "printed" });
 
     document.querySelectorAll(".document-print-root").forEach((element) => element.remove());
 
@@ -167,9 +172,9 @@ export function OrderDetailsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Export order"
+        eyebrow={isShipment ? "Consolidated shipment" : "Sales contract"}
         title={order.invoice_number}
-        description={`${order.client_name} - ${new Date(order.contract_date).toLocaleDateString()}`}
+        description={`${order.client_name} - ${new Date(order.contract_date).toLocaleDateString()}${isShipment && order.sales_contract_number ? ` - Contracts: ${order.sales_contract_number}` : ""}`}
         action={<div className="flex flex-wrap items-center gap-3">{canEditOrder && <Link to={`/orders/${order.id}/edit`} className="btn-secondary"><Edit3 size={18} /> Edit order</Link>}{canDeleteOrder && <button type="button" onClick={deleteOrder} className="btn-secondary text-red-600 hover:text-red-700"><Trash2 size={18} /> Delete order</button>}<StatusBadge status={order.status} /></div>}
       />
       {gatePassOnly ? (
@@ -202,7 +207,7 @@ export function OrderDetailsPage() {
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           <section className="panel p-5 md:p-7">
-            <h2 className="mb-5 font-bold">Shipment summary</h2>
+            <h2 className="mb-5 font-bold">{isShipment ? "Shipment summary" : "Contract summary"}</h2>
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
               <Info label="Client" value={order.client_name} />
               <Info label="Customs consignee" value={order.customs_consignee_name} />
@@ -211,7 +216,7 @@ export function OrderDetailsPage() {
             </div>
           </section>
           <section className="panel overflow-hidden">
-            <div className="border-b px-5 py-4 md:px-7"><h2 className="font-bold">Order lines</h2></div>
+            <div className="border-b px-5 py-4 md:px-7"><h2 className="font-bold">{isShipment ? "Allocated shipment lines" : "Contract lines"}</h2></div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[800px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -227,8 +232,8 @@ export function OrderDetailsPage() {
                 <tbody className="divide-y">
                   {order.items.map((item) => (
                     <tr key={item.id}>
-                      <td className="px-5 py-4"><div className="font-semibold">{item.product_name}</div><div className="text-xs text-slate-400">HS {item.hs_code || "-"}</div></td>
-                      <td className="px-5 py-4">{item.quantity} {item.quantity_unit}</td>
+                      <td className="px-5 py-4"><div className="font-semibold">{item.product_name}</div><div className="text-xs text-slate-400">{isShipment && item.contract_number ? `${item.contract_number} · ` : ""}HS {item.hs_code || "-"}</div></td>
+                      <td className="px-5 py-4"><div>{item.quantity} {item.quantity_unit}</div>{!isShipment && <div className="mt-1 text-xs text-slate-400">Allocated {Number(item.allocated_quantity || 0).toLocaleString()} · Remaining {Number(item.remaining_quantity || 0).toLocaleString()}</div>}</td>
                       <td className="px-5 py-4">{Number(item.total_net_weight).toLocaleString()} kg</td>
                       <td className="px-5 py-4">{Number(item.total_gross_weight).toLocaleString()} kg</td>
                       <td className="px-5 py-4">{order.currency} {Number(item.client_value).toLocaleString()}</td>
@@ -239,7 +244,7 @@ export function OrderDetailsPage() {
               </table>
             </div>
           </section>
-          {canEditGatePass && (
+          {isShipment && canEditGatePass && (
             <section className="panel flex flex-wrap items-center justify-between gap-4 p-5 md:p-6">
               <div className="flex items-start gap-4">
                 <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-forest-50 text-forest-700"><Truck size={20} /></div>
@@ -256,7 +261,7 @@ export function OrderDetailsPage() {
           {can("documents.preview") && <section>
             <h2 className="mb-4 text-lg font-bold">Documents</h2>
             <div className="grid gap-4 md:grid-cols-2">
-              {documents.map((document) => (
+              {availableDocuments.map((document) => (
                 <button key={document[0]} onClick={() => openPreview(document)} className="panel group flex items-start gap-4 p-5 text-left transition hover:-translate-y-0.5 hover:border-forest-300">
                   <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-forest-50 text-forest-700"><FileText size={20} /></div>
                   <div><div className="font-bold group-hover:text-forest-700">{document[1]}</div><div className="mt-1 text-sm leading-5 text-slate-500">{document[2]}</div></div>
@@ -267,7 +272,7 @@ export function OrderDetailsPage() {
         </div>
         <aside className="space-y-4">
           <div className="panel p-6"><h2 className="mb-5 font-bold">Calculated totals</h2><div className="space-y-4"><Info label="Total packages" value={totals.packages.toLocaleString()} /><Info label="Net weight" value={`${totals.net.toLocaleString()} kg`} /><Info label="Gross weight" value={`${totals.gross.toLocaleString()} kg`} /><Info label="Client invoice value" value={`${order.currency} ${totals.client.toLocaleString()}`} /><Info label="Customs invoice value" value={`${order.currency} ${totals.customs.toLocaleString()}`} /></div></div>
-          <div className="rounded-2xl bg-forest-900 p-6 text-white"><div className="text-xs font-bold uppercase tracking-widest text-gold">Document rule</div><p className="mt-3 text-sm leading-6 text-white/65">Samples are included in package and weight totals, but excluded from both commercial invoice values.</p></div>
+          <div className="rounded-2xl bg-forest-900 p-6 text-white"><div className="text-xs font-bold uppercase tracking-widest text-gold">{isShipment ? "Shipment document rule" : "Fulfillment rule"}</div><p className="mt-3 text-sm leading-6 text-white/65">{isShipment ? "Only quantities allocated to this shipment appear in its documents. Samples affect packages and weights but not invoice values." : "This contract records ordered quantities. Create a shipment to allocate partial quantities and generate export documents."}</p></div>
         </aside>
       </div>
       )}
@@ -565,7 +570,7 @@ function GatePassDocument({ order, totals }) {
           {sampleItems.map((item, index) => <GatePassLine key={item.id} item={item} index={commercialItems.length + index + 1} isSample />)}
           <tr className="gate-seal-row">
             <td></td>
-            <td>{seals.map((seal, index) => <span key={seal}>SEAL NO. Z.A FOOD IND. {seal}</span>)}</td>
+             <td>{seals.map((seal) => <span key={seal}>SEAL NO. Z.A FOOD IND. {seal}</span>)}</td>
             <td></td>
           </tr>
           <tr className="gate-total-row">

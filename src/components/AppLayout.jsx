@@ -1,18 +1,18 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import {
-  BarChart3, Boxes, ChevronRight, FileStack, LayoutDashboard, Landmark, LogOut, PackageSearch,
-  Menu, ShieldCheck, Truck, UserRoundCog, UsersRound, X
+  BarChart3, Boxes, ChevronRight, FileStack, LayoutDashboard, Landmark, LogOut,
+  Menu, PackageCheck, ShieldCheck, Truck, UserRoundCog, UsersRound, X
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 const navigation = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard.view", end: true },
-  { to: "/orders", label: "Export Orders", icon: FileStack, permission: "orders.view" },
+  { to: "/orders", label: "Sales Contracts", icon: FileStack, permission: "orders.view" },
+  { to: "/shipments", label: "Shipments", icon: PackageCheck, permission: "orders.view" },
   { to: "/ledger", label: "Party Ledger", icon: Landmark, permission: "ledger.view" },
   { to: "/reports", label: "Reports", icon: BarChart3, permission: "reports.view" },
   { to: "/products", label: "Products", icon: Boxes, permission: "products.view" },
-  { to: "/stock", label: "Stock Ledger", icon: PackageSearch, permission: "stock.view" },
   { to: "/parties", label: "Business Parties", icon: Truck, permission: "parties.view" },
   { to: "/users", label: "Users", icon: UsersRound, permission: "users.view" },
   { to: "/roles", label: "Roles & Access", icon: ShieldCheck, permission: "roles.manage" }
@@ -21,6 +21,7 @@ const navigation = [
 export function AppLayout({ children }) {
   const [open, setOpen] = useState(false);
   const { user, logout, can } = useAuth();
+  const gatePassOnly = can("gate_pass.view") && !can("documents.preview") && !can("orders.edit");
 
   const sidebar = (
     <div className="flex h-full flex-col bg-forest-900 text-white">
@@ -35,7 +36,7 @@ export function AppLayout({ children }) {
         <button className="lg:hidden" onClick={() => setOpen(false)}><X size={20} /></button>
       </div>
       <nav className="flex-1 space-y-1 p-4">
-        {navigation.filter((item) => can(item.permission)).map(({ to, label, icon: Icon, end }) => (
+        {navigation.filter((item) => can(item.permission) && !(gatePassOnly && item.to === "/orders")).map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}

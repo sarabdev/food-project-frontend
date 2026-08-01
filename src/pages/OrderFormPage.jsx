@@ -103,15 +103,15 @@ export function OrderFormPage() {
   return (
     <>
       <PageHeader
-        eyebrow={isEditing ? "Edit order" : "New order"}
-        title={isEditing ? "Edit export order" : "Create export order"}
-        description={isEditing ? "Update shipment and product information before printing documents." : "The invoice number will be generated automatically when this draft is saved."}
+        eyebrow={isEditing ? "Edit contract" : "New contract"}
+        title={isEditing ? "Edit sales contract" : "Create sales contract"}
+        description={isEditing ? "Update contracted products before any quantity is allocated to a shipment." : "This records the products and quantities agreed with the client."}
         action={isEditing && <Link to={`/orders/${id}`} className="btn-secondary">Cancel</Link>}
       />
       {loading ? <div className="py-20 text-center text-slate-400">Loading order...</div> : (
       <form onSubmit={save}>
         <section className="panel p-5 md:p-7">
-          <h2 className="mb-5 font-bold">Order and shipping details</h2>
+          <h2 className="mb-5 font-bold">Contract and expected shipping details</h2>
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             <SelectField label="Actual client" value={form.client_id} onChange={(value) => setForm({ ...form, client_id: value })} options={clients} required />
             <SelectField label="Customs / B/L consignee" value={form.customs_consignee_id} onChange={(value) => setForm({ ...form, customs_consignee_id: value })} options={consignees} required />
@@ -134,17 +134,16 @@ export function OrderFormPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3">Cartons / Packages</th><th className="px-4 py-3">Net / carton</th><th className="px-4 py-3">Gross / carton</th><th className="px-4 py-3">Client / carton</th><th className="px-4 py-3">Customs / kg</th><th className="px-4 py-3">Sample</th><th /></tr></thead>
-              <tbody className="divide-y">{items.map((item, index) => {
-                const selectedProduct = products.find((product) => Number(product.id) === Number(item.product_id));
-                return <tr key={index}><td className="px-4 py-3"><select className="field min-w-64" value={item.product_id} onChange={(e) => chooseProduct(index, e.target.value)}>{products.map((product) => <option key={product.id} value={product.id}>{product.name} · {availableCartons(product)} available</option>)}</select>{selectedProduct && <div className="mt-1 text-xs text-slate-400">{Number(selectedProduct.stock_in_hand || 0).toLocaleString()} {packPlural(selectedProduct.package_type).toLowerCase()} in stock</div>}</td>{["quantity", "net_weight_per_carton", "gross_weight_per_carton", "client_price_per_carton", "customs_price_per_kg"].map((field) => <td key={field} className="px-4 py-3"><input className="field w-28" type="number" min="0" step="0.001" value={item[field]} onChange={(e) => updateItem(index, field, e.target.value)} /></td>)}<td className="px-4 py-3"><input type="checkbox" className="h-5 w-5 accent-forest-700" checked={item.is_sample} onChange={(e) => updateItem(index, "is_sample", e.target.checked)} /></td><td className="px-4 py-3"><button type="button" onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg p-2 text-red-500 hover:bg-red-50"><Trash2 size={17} /></button></td></tr>;
-              })}</tbody>
+              <tbody className="divide-y">{items.map((item, index) => (
+                <tr key={index}><td className="px-4 py-3"><select className="field min-w-64" value={item.product_id} onChange={(e) => chooseProduct(index, e.target.value)}>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></td>{["quantity", "net_weight_per_carton", "gross_weight_per_carton", "client_price_per_carton", "customs_price_per_kg"].map((field) => <td key={field} className="px-4 py-3"><input className="field w-28" type="number" min="0" step="0.001" value={item[field]} onChange={(e) => updateItem(index, field, e.target.value)} /></td>)}<td className="px-4 py-3"><input type="checkbox" className="h-5 w-5 accent-forest-700" checked={item.is_sample} onChange={(e) => updateItem(index, "is_sample", e.target.checked)} /></td><td className="px-4 py-3"><button type="button" onClick={() => setItems(items.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg p-2 text-red-500 hover:bg-red-50"><Trash2 size={17} /></button></td></tr>
+              ))}</tbody>
             </table>
           </div>
           {!items.length && <div className="py-12 text-center text-sm text-slate-400">Add at least one product line.</div>}
           <div className="grid gap-3 border-t bg-forest-50 p-5 text-sm sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"><Summary label="Packages" value={totals.packages.toLocaleString()} /><Summary label="Net weight" value={`${totals.net.toLocaleString()} kg`} /><Summary label="Gross weight" value={`${totals.gross.toLocaleString()} kg`} /><Summary label="Order total" value={orderMoney(totals.value, form.currency)} /><Summary label={`Opening advance (${Number(form.advance_percentage || 0).toLocaleString()}%)`} value={orderMoney(openingAdvance, form.currency)} /><Summary label="Balance after advance" value={orderMoney(Math.max(0, totals.value - openingAdvance), form.currency)} /></div>
         </section>
         {error && <div className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
-        <div className="mt-6 flex justify-end"><button disabled={saving || !items.length} className="btn-primary px-6"><Save size={18} /> {saving ? "Saving..." : isEditing ? "Update order" : "Save draft order"}</button></div>
+        <div className="mt-6 flex justify-end"><button disabled={saving || !items.length} className="btn-primary px-6"><Save size={18} /> {saving ? "Saving..." : isEditing ? "Update contract" : "Save draft contract"}</button></div>
       </form>
       )}
     </>
@@ -218,15 +217,3 @@ function TextField({ label, value, onChange, type = "text", required }) { return
 function SelectField({ label, value, onChange, options, required }) { return <label><span className="label">{label}</span><select className="field" required={required} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>; }
 function Summary({ label, value }) { return <div><div className="text-xs font-bold uppercase tracking-wide text-forest-600">{label}</div><div className="mt-1 text-lg font-bold text-forest-900">{value}</div></div>; }
 function orderMoney(value, currency) { return `${currency || "USD"} ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
-function availableCartons(product) {
-  const packsPerCarton = Number(product.units_per_carton || 0);
-  if (!packsPerCarton) return "0 cartons";
-  const stock = Number(product.stock_in_hand || 0);
-  const cartons = Math.floor(stock / packsPerCarton);
-  const loose = stock - cartons * packsPerCarton;
-  return `${cartons.toLocaleString()} cartons${loose ? ` + ${loose.toLocaleString()} loose` : ""}`;
-}
-function packPlural(value) {
-  const pack = String(value || "pack");
-  return pack.endsWith("x") || pack.endsWith("ch") ? `${pack}es` : `${pack}s`;
-}
