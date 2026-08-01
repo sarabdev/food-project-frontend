@@ -3,17 +3,17 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { QuickAddPartyModal } from "../components/QuickAddPartyModal";
+import { QuickAddBankAccountModal } from "../components/QuickAddBankAccountModal";
 import { api, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
 const today = new Date().toISOString().slice(0, 10);
 const emptyOrder = {
-  client_id: "", customs_consignee_id: "", contract_date: today, valid_until: "",
+  client_id: "", customs_consignee_id: "", bank_account_id: "", contract_date: today, valid_until: "",
   sales_contract_number: "", payment_term: "40% advance, balance against scanned B/L",
   advance_percentage: 40, freight_amount: 0, currency: "USD",
   port_of_loading: "Karachi, Pakistan", port_of_destination: "",
   final_destination: "", shipping_type: "CAF", shipped_per: "By Sea",
-  container_number: "", container_type: "40 HC", cbm: 0,
   freight_term: "Freight Prepaid", customer_instructions: "", notes: "",
 };
 
@@ -21,20 +21,24 @@ export function OrderFormPage() {
   const [form, setForm] = useState(emptyOrder);
   const [products, setProducts] = useState([]);
   const [parties, setParties] = useState([]);
+  const [bankAccounts, setBankAccounts] = useState([]);
   const [items, setItems] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [quickAddType, setQuickAddType] = useState(null);
+  const [quickBankOpen, setQuickBankOpen] = useState(false);
   const navigate = useNavigate();
   const { can } = useAuth();
   const { id } = useParams();
   const isEditing = Boolean(id);
 
   useEffect(() => {
-    Promise.all([api.get("/products"), api.get("/parties")]).then(([productsResponse, partiesResponse]) => {
+    Promise.all([api.get("/products"), api.get("/parties"), api.get("/bank-accounts")]).then(([productsResponse, partiesResponse, bankResponse]) => {
       setProducts(productsResponse.data.products);
       setParties(partiesResponse.data.parties);
+      setBankAccounts(bankResponse.data.bank_accounts);
+      setForm((current) => ({ ...current, bank_account_id: current.bank_account_id || bankResponse.data.bank_accounts[0]?.id || "" }));
     });
   }, []);
 
@@ -57,6 +61,7 @@ export function OrderFormPage() {
 
   const clients = parties.filter((party) => party.party_type === "client");
   const consignees = parties.filter((party) => party.party_type === "customs_consignee");
+  const bankOptions = bankAccounts.map((account) => ({ id: account.id, name: `${account.account_name} · ${account.currency}` }));
   const totals = useMemo(() => items.reduce((sum, item) => ({
     packages: sum.packages + Number(item.quantity || 0),
     net: sum.net + Number(item.quantity || 0) * Number(item.net_weight_per_carton || 0),
@@ -87,6 +92,12 @@ export function OrderFormPage() {
       [party.party_type === "client" ? "client_id" : "customs_consignee_id"]: party.id
     }));
     setQuickAddType(null);
+  }
+
+  function bankAccountCreated(account) {
+    setBankAccounts((current) => [...current, account].sort((left, right) => left.account_name.localeCompare(right.account_name)));
+    setForm((current) => ({ ...current, bank_account_id: account.id }));
+    setQuickBankOpen(false);
   }
 
   async function save(event) {
@@ -128,18 +139,16 @@ export function OrderFormPage() {
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             <SelectField label="Actual client" value={form.client_id} onChange={(value) => setForm({ ...form, client_id: value })} options={clients} required onAdd={can("parties.create") ? () => setQuickAddType("client") : null} addLabel="Add client" />
             <SelectField label="Customs / B/L consignee" value={form.customs_consignee_id} onChange={(value) => setForm({ ...form, customs_consignee_id: value })} options={consignees} required onAdd={can("parties.create") ? () => setQuickAddType("customs_consignee") : null} addLabel="Add consignee" />
+            <SelectField label="Receiving bank account" value={form.bank_account_id} onChange={(value) => setForm({ ...form, bank_account_id: value })} options={bankOptions} required onAdd={can("bank_accounts.create") ? () => setQuickBankOpen(true) : null} addLabel="Add account" />
             <TextField label="Contract date" type="date" value={form.contract_date} onChange={(value) => setForm({ ...form, contract_date: value })} required />
             <TextField label="Valid until" type="date" value={form.valid_until} onChange={(value) => setForm({ ...form, valid_until: value })} />
             <TextField label="Port of loading" value={form.port_of_loading} onChange={(value) => setForm({ ...form, port_of_loading: value })} />
             <TextField label="Port of destination" value={form.port_of_destination} onChange={(value) => setForm({ ...form, port_of_destination: value })} />
             <TextField label="Final destination" value={form.final_destination} onChange={(value) => setForm({ ...form, final_destination: value })} />
             <TextField label="Shipped per" value={form.shipped_per} onChange={(value) => setForm({ ...form, shipped_per: value })} />
-            <TextField label="Container number" value={form.container_number} onChange={(value) => setForm({ ...form, container_number: value })} />
-            <TextField label="Container type" value={form.container_type} onChange={(value) => setForm({ ...form, container_type: value })} />
-            <TextField label="CBM" type="number" value={form.cbm} onChange={(value) => setForm({ ...form, cbm: value })} />
             <TextField label="Advance %" type="number" value={form.advance_percentage} onChange={(value) => setForm({ ...form, advance_percentage: value })} />
             <div className="md:col-span-2"><TextField label="Payment terms" value={form.payment_term} onChange={(value) => setForm({ ...form, payment_term: value })} /></div>
-            <div className="md:col-span-2"><TextField label="Freight terms" value={form.freight_term} onChange={(value) => setForm({ ...form, freight_term: value })} /></div>
+            <div className="md:col-span-2"><ChoiceField label="Freight terms" value={form.freight_term} onChange={(value) => setForm({ ...form, freight_term: value })} options={["Freight Prepaid", "Freight Collect"]} required /></div>
           </div>
         </section>
         <section className="panel mt-6 overflow-hidden">
@@ -160,6 +169,7 @@ export function OrderFormPage() {
       </form>
       )}
       <QuickAddPartyModal open={Boolean(quickAddType)} partyType={quickAddType || "client"} onClose={() => setQuickAddType(null)} onCreated={partyCreated} />
+      <QuickAddBankAccountModal open={quickBankOpen} onClose={() => setQuickBankOpen(false)} onCreated={bankAccountCreated} />
     </>
   );
 }
@@ -181,6 +191,7 @@ function toEditableOrder(order) {
     ...emptyOrder,
     client_id: fieldValue(order.client_id),
     customs_consignee_id: fieldValue(order.customs_consignee_id),
+    bank_account_id: fieldValue(order.bank_account_id),
     contract_date: dateInputValue(order.contract_date) || today,
     valid_until: dateInputValue(order.valid_until),
     sales_contract_number: fieldValue(order.sales_contract_number),
@@ -193,9 +204,6 @@ function toEditableOrder(order) {
     final_destination: fieldValue(order.final_destination),
     shipping_type: fieldValue(order.shipping_type),
     shipped_per: fieldValue(order.shipped_per),
-    container_number: fieldValue(order.container_number),
-    container_type: fieldValue(order.container_type),
-    cbm: fieldValue(order.cbm),
     freight_term: fieldValue(order.freight_term),
     customer_instructions: fieldValue(order.customer_instructions),
     notes: fieldValue(order.notes),
@@ -228,6 +236,7 @@ function dateInputValue(value) {
 }
 
 function TextField({ label, value, onChange, type = "text", required }) { return <label><span className="label">{label}</span><input className="field" required={required} type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.01" : undefined} value={value} onChange={(e) => onChange(e.target.value)} /></label>; }
+function ChoiceField({ label, value, onChange, options, required }) { return <label><span className="label">{label}</span><select className="field" required={required} value={value} onChange={(event) => onChange(event.target.value)}>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>; }
 function SelectField({ label, value, onChange, options, required, onAdd, addLabel }) {
   const inputId = `contract-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   return <div><div className="label flex items-center justify-between gap-2"><label htmlFor={inputId}>{label}</label>{onAdd && <button type="button" className="inline-flex items-center gap-1 font-semibold normal-case tracking-normal text-forest-700 hover:text-forest-900" onClick={onAdd}><Plus size={15} /> {addLabel}</button>}</div><select id={inputId} className="field" required={required} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Select...</option>{options.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>;

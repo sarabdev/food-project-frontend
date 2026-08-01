@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Edit3, FileText, Printer, Save, Trash2, Truck } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
@@ -21,18 +21,7 @@ const documents = [
 const company = {
   address: "P-61, Main Narwala Road, School Stop, Marzi Pura, Faisalabad, Pakistan",
   contact: "Tel# +92-41-269 3860, email: zafoodindustry@hotmail.com, website: www.zafood.net",
-  bank: [
-    ["To the Standard Chartered Bank Ltd, UAE A/C", "358-020675-001"],
-    ["Beneficiary", "Z.A FOOD INDUSTRIES"],
-    ["Bank", "Dubai Islamic Bank Pakistan Ltd"],
-    ["Branch", "Main Branch, Faisalabad"],
-    ["A/C", "3587-020675-001"],
-    ["Swift", "DUIBPKKA"],
-    ["IBAN", "PK94DUIB0000000055839002"],
-    ["Swift NY Code", "SCBL US 33"]
-  ],
   terms: [
-    "Goods will be loaded into 1 x 40 feet container.",
     "Quantity and quality are as per final documents.",
     "Freight will be charged actual freight at the time of loading, if any.",
     "Above prices are valid for 15 days only.",
@@ -91,7 +80,7 @@ export function OrderDetailsPage({ entityType = "orders" }) {
   }), { packages: 0, net: 0, gross: 0, client: 0, customs: 0 }), [order]);
 
   if (!order) return <div className="py-20 text-center text-slate-400">Loading order...</div>;
-  const canEditOrder = !isShipment && can("orders.edit") && !["shipped", "completed", "cancelled"].includes(order.status);
+  const canEditOrder = can("orders.edit") && !["shipped", "completed", "cancelled"].includes(order.status);
   const canDeleteOrder = !isShipment && can("orders.delete") && !["shipped", "completed"].includes(order.status);
   const canEditGatePass = canEditGatePassPermission && !["shipped", "completed", "cancelled"].includes(order.status);
   const canViewGatePass = can("documents.preview") || can("gate_pass.view");
@@ -175,7 +164,7 @@ export function OrderDetailsPage({ entityType = "orders" }) {
         eyebrow={isShipment ? "Consolidated shipment" : "Sales contract"}
         title={order.invoice_number}
         description={`${order.client_name} - ${new Date(order.contract_date).toLocaleDateString()}${isShipment && order.sales_contract_number ? ` - Contracts: ${order.sales_contract_number}` : ""}`}
-        action={<div className="flex flex-wrap items-center gap-3">{canEditOrder && <Link to={`/orders/${order.id}/edit`} className="btn-secondary"><Edit3 size={18} /> Edit order</Link>}{canDeleteOrder && <button type="button" onClick={deleteOrder} className="btn-secondary text-red-600 hover:text-red-700"><Trash2 size={18} /> Delete order</button>}<StatusBadge status={order.status} /></div>}
+        action={<div className="flex flex-wrap items-center gap-3">{canEditOrder && <Link to={isShipment ? `/shipments/${order.id}/edit` : `/orders/${order.id}/edit`} className="btn-secondary"><Edit3 size={18} /> {isShipment ? "Edit shipment" : "Edit order"}</Link>}{canDeleteOrder && <button type="button" onClick={deleteOrder} className="btn-secondary text-red-600 hover:text-red-700"><Trash2 size={18} /> Delete order</button>}<StatusBadge status={order.status} /></div>}
       />
       {gatePassOnly ? (
         <section className="panel mx-auto max-w-3xl p-6 md:p-8">
@@ -212,7 +201,9 @@ export function OrderDetailsPage({ entityType = "orders" }) {
               <Info label="Client" value={order.client_name} />
               <Info label="Customs consignee" value={order.customs_consignee_name} />
               <Info label="Route" value={`${order.port_of_loading || "-"} -> ${order.port_of_destination || "-"}`} />
-              <Info label="Container" value={[order.container_number, order.container_type].filter(Boolean).join(" / ") || "Not assigned"} />
+              {isShipment
+                ? <Info label={order.containers?.length > 1 ? "Containers" : "Container"} value={order.containers?.length ? order.containers.map((container) => `${container.container_number}${container.container_type ? ` (${container.container_type})` : ""}`).join(", ") : [order.container_number, order.container_type].filter(Boolean).join(" / ") || "Not assigned"} />
+                : <Info label="Valid until" value={order.valid_until ? new Date(order.valid_until).toLocaleDateString() : "Not specified"} />}
             </div>
           </section>
           <section className="panel overflow-hidden">
@@ -232,7 +223,7 @@ export function OrderDetailsPage({ entityType = "orders" }) {
                 <tbody className="divide-y">
                   {order.items.map((item) => (
                     <tr key={item.id}>
-                      <td className="px-5 py-4"><div className="font-semibold">{item.product_name}</div><div className="text-xs text-slate-400">{isShipment && item.contract_number ? `${item.contract_number} · ` : ""}HS {item.hs_code || "-"}</div></td>
+                      <td className="px-5 py-4"><div className="font-semibold">{item.product_name}</div><div className="text-xs text-slate-400">{isShipment && item.contract_number ? `${item.contract_number} · ` : ""}HS {item.hs_code || "-"}</div>{isShipment && item.container_number && <div className="mt-1 text-xs font-semibold text-forest-700">{item.container_number}</div>}</td>
                       <td className="px-5 py-4"><div>{item.quantity} {item.quantity_unit}</div>{!isShipment && <div className="mt-1 text-xs text-slate-400">Allocated {Number(item.allocated_quantity || 0).toLocaleString()} · Remaining {Number(item.remaining_quantity || 0).toLocaleString()}</div>}</td>
                       <td className="px-5 py-4">{Number(item.total_net_weight).toLocaleString()} kg</td>
                       <td className="px-5 py-4">{Number(item.total_gross_weight).toLocaleString()} kg</td>
@@ -406,6 +397,7 @@ function BLInstructionsDocument({ order, totals }) {
   const sampleItems = order.items.filter((item) => item.is_sample);
   const commercialCartons = commercialItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   const sampleCartons = sampleItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  const containerGroups = containerItemGroups(order.items);
 
   return (
     <div className="print-document bl-sheet bg-white text-[#202020]">
@@ -483,7 +475,11 @@ function BLInstructionsDocument({ order, totals }) {
         <table>
           <thead><tr><th>CONTAINER NO.</th><th>CARTONS</th><th>NET WT</th><th>GROSS WT</th></tr></thead>
           <tbody>
-            <tr><td>{order.container_number || "As Per Schedule"}</td><td>{compactNumber(commercialCartons)}</td><td>{compactNumber(Math.round(totals.net))}</td><td>{compactNumber(Math.round(totals.gross))}</td></tr>
+            {containerGroups.map((group) => {
+              const groupTotals = packingTotals(group.items);
+              const groupCommercialCartons = group.items.filter((item) => !item.is_sample).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+              return <tr key={group.id}><td>{group.label}</td><td>{compactNumber(groupCommercialCartons)}</td><td>{compactNumber(Math.round(groupTotals.net))}</td><td>{compactNumber(Math.round(groupTotals.gross))}</td></tr>;
+            })}
             <tr><td><strong>TOTAL:-</strong></td><td><strong>{compactNumber(commercialCartons)}</strong></td><td><strong>{compactNumber(Math.round(totals.net))}</strong></td><td><strong>{compactNumber(Math.round(totals.gross))}</strong></td></tr>
           </tbody>
         </table>
@@ -520,7 +516,7 @@ function GatePassDocument({ order, totals }) {
       <section className="gate-title-row">
         <div>Gate Pass # <strong>{order.invoice_number}</strong></div>
         <h1>GATE PASS</h1>
-        <div><strong>DATED :</strong>&nbsp;&nbsp;{formatDate(order.contract_date)}</div>
+        <div><strong>DATED :</strong>&nbsp;&nbsp;{formatDate(documentDate(order))}</div>
       </section>
 
       <section className="gate-agent-box">
@@ -647,7 +643,7 @@ function CommercialInvoiceDocument({ order, documentType }) {
           <h1>COMMERCIAL INVOICE</h1>
           <InfoRows rows={[
             ["Invoice No.", order.invoice_number],
-            ["Dated", formatDate(order.contract_date)]
+            ["Dated", formatDate(documentDate(order))]
           ]} />
         </div>
       </section>
@@ -801,7 +797,9 @@ function PackingWeightListDocument({ order, documentType }) {
   const commercialTotals = packingTotals(commercialItems);
   const sampleTotals = packingTotals(sampleItems);
   const grandTotals = packingTotals(order.items);
-  const containerLabel = order.container_number || "As Per Schedule";
+  const containerLabel = order.containers?.length
+    ? order.containers.map((container) => container.container_number).join(", ")
+    : order.container_number || "As Per Schedule";
 
   return (
     <div className="print-document packing-sheet bg-white text-[#202020]">
@@ -817,7 +815,7 @@ function PackingWeightListDocument({ order, documentType }) {
           <h1>{isClientPackingList ? "PACKING LIST" : "PACKING / WEIGHT LIST"}</h1>
           <InfoRows rows={[
             ["Our Reference No.", order.invoice_number],
-            ["Dated", formatDate(order.contract_date)]
+            ["Dated", formatDate(documentDate(order))]
           ]} />
         </div>
       </section>
@@ -836,9 +834,9 @@ function PackingWeightListDocument({ order, documentType }) {
       </section>
 
       <h2 className="packing-section-title">PACKING / WEIGHT DETAILS</h2>
-      <PackingDetailsTable commercialItems={commercialItems} sampleItems={sampleItems} commercialTotals={commercialTotals} sampleTotals={sampleTotals} isClientPackingList={isClientPackingList} />
+      <PackingDetailsTable items={order.items} commercialItems={commercialItems} sampleItems={sampleItems} commercialTotals={commercialTotals} sampleTotals={sampleTotals} isClientPackingList={isClientPackingList} />
 
-      <PackingSummary containerLabel={containerLabel} commercialTotals={commercialTotals} sampleTotals={sampleTotals} grandTotals={grandTotals} isClientPackingList={isClientPackingList} />
+      <PackingSummary order={order} containerLabel={containerLabel} grandTotals={grandTotals} isClientPackingList={isClientPackingList} />
 
       <section className="packing-origin">
         <strong>"This is to Certify that Goods are of Pakistan Origin."</strong>
@@ -860,9 +858,11 @@ function PackingWeightListDocument({ order, documentType }) {
   );
 }
 
-function PackingDetailsTable({ commercialItems, sampleItems, commercialTotals, sampleTotals, isClientPackingList }) {
+function PackingDetailsTable({ items, commercialItems, sampleItems, commercialTotals, sampleTotals, isClientPackingList }) {
   const commercialPouches = packingPouchTotal(commercialItems);
   const samplePouches = packingPouchTotal(sampleItems);
+  const groups = containerItemGroups(items);
+  let displayIndex = 0;
   return (
     <table className="packing-table">
       <colgroup>
@@ -892,14 +892,17 @@ function PackingDetailsTable({ commercialItems, sampleItems, commercialTotals, s
         </tr>
       </thead>
       <tbody>
-        {commercialItems.length > 0 && (
-          <tr className="packing-group-row"><td colSpan="10">{compactNumber(commercialTotals.packages)} CARTONS OF CONFECTIONERY PRODUCTS</td></tr>
-        )}
-        {commercialItems.map((item, index) => <PackingLine key={item.id} item={item} index={index + 1} />)}
-        {sampleItems.length > 0 && (
-          <tr className="packing-sample-row"><td colSpan="10">BELOW MENTIONED ITEMS ARE FOR SAMPLE PURPOSE ONLY HAVING NO COMMERCIAL VALUE</td></tr>
-        )}
-        {sampleItems.map((item, index) => <PackingLine key={item.id} item={item} index={commercialItems.length + index + 1} />)}
+        {groups.map((group) => {
+          const groupCommercial = group.items.filter((item) => !item.is_sample);
+          const groupSamples = group.items.filter((item) => item.is_sample);
+          const groupTotals = packingTotals(group.items);
+          return <Fragment key={group.id}>
+            <tr className="packing-group-row"><td colSpan="10">CONTAINER: {group.label} · {compactNumber(groupTotals.packages)} PACKAGES</td></tr>
+            {groupCommercial.map((item) => <PackingLine key={item.id} item={item} index={++displayIndex} />)}
+            {groupSamples.length > 0 && <tr className="packing-sample-row"><td colSpan="10">SAMPLES IN {group.label} — NO COMMERCIAL VALUE</td></tr>}
+            {groupSamples.map((item) => <PackingLine key={item.id} item={item} index={++displayIndex} />)}
+          </Fragment>;
+        })}
         <tr className="packing-total-row">
           <td colSpan="3">T O T A L</td>
           <td>{compactNumber(commercialTotals.packages)}<br />{sampleTotals.packages ? compactNumber(sampleTotals.packages) : ""}</td>
@@ -939,7 +942,8 @@ function PackingLine({ item, index }) {
   );
 }
 
-function PackingSummary({ containerLabel, commercialTotals, sampleTotals, grandTotals, isClientPackingList }) {
+function PackingSummary({ order, containerLabel, grandTotals, isClientPackingList }) {
+  const groups = containerItemGroups(order.items);
   return (
     <section className="packing-summary">
       <h2>SUMMERY OF PACKING / WEIGHT DETAILS</h2>
@@ -954,19 +958,11 @@ function PackingSummary({ containerLabel, commercialTotals, sampleTotals, grandT
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td>{containerLabel}</td>
-            <td rowSpan="2"><strong>GRAND TOTAL</strong></td>
-            <td>{compactNumber(commercialTotals.packages)} {commercialTotals.unitLabel}<br />{sampleTotals.packages ? `${compactNumber(sampleTotals.packages)} ${sampleTotals.unitLabel}` : ""}</td>
-            <td>{number(commercialTotals.net)}&nbsp;&nbsp;&nbsp;&nbsp;{number(commercialTotals.gross)}<br />{sampleTotals.net ? `${number(sampleTotals.net)}     ${number(sampleTotals.gross)}` : ""}</td>
-            {isClientPackingList && <td>{compactNumber(grandTotals.pouches)}</td>}
-          </tr>
-          <tr>
-            <td></td>
-            <td>{number(grandTotals.net)}<br />KGS</td>
-            <td>{number(grandTotals.gross)}<br />KGS</td>
-            {isClientPackingList && <td></td>}
-          </tr>
+          {groups.map((group) => {
+            const totals = packingTotals(group.items);
+            return <tr key={group.id}><td>{group.label}</td><td>{compactNumber(totals.packages)}</td><td>{number(totals.net)} KGS</td><td>{number(totals.gross)} KGS</td>{isClientPackingList && <td>{compactNumber(totals.pouches)}</td>}</tr>;
+          })}
+          <tr><td><strong>{groups.length > 1 ? "GRAND TOTAL" : containerLabel}</strong></td><td><strong>{compactNumber(grandTotals.packages)}</strong></td><td><strong>{number(grandTotals.net)} KGS</strong></td><td><strong>{number(grandTotals.gross)} KGS</strong></td>{isClientPackingList && <td><strong>{compactNumber(grandTotals.pouches)}</strong></td>}</tr>
         </tbody>
       </table>
     </section>
@@ -1027,19 +1023,16 @@ function SalesContractDocument({ order }) {
           ["Cell #", "-"]
         ]} />
         <DetailPanel title="Shipping Details" rows={[
-          ["Container Type", order.container_type || "-"],
           ["Shipping Type", order.shipping_type || "-"],
           ["Port of Loading", order.port_of_loading || "-"],
           ["Port of Discharge", order.port_of_destination || "-"],
           ["Production Time", "45 DAYS"],
           ["Payment Terms", order.payment_term || "-"]
         ]} />
-        <DetailPanel title="Container Detail" rows={[
-          ["Container #", order.container_number || "As Per Schedule"],
-          ["Loading Date", "As Per Schedule"],
+        <DetailPanel title="Order Summary" rows={[
           ["Total Cartons", compactNumber(commercialTotals.packages)],
-          ["Cargo Net Weight", `${number(commercialTotals.net)} Per Container`],
-          ["Cargo Gross Weight", `${number(commercialTotals.gross)} Per Container`],
+          ["Cargo Net Weight", `${number(commercialTotals.net)} KGS`],
+          ["Cargo Gross Weight", `${number(commercialTotals.gross)} KGS`],
           ["Tolerance", "10% +/-"]
         ]} />
       </section>
@@ -1062,7 +1055,7 @@ function SalesContractDocument({ order }) {
         </div>
         <div>
           <DetailPanel title="Customer Instruction" rows={[[order.customer_instructions || "Freight (if any)", ""]]} compact />
-          <DetailPanel title="Bank Detail" rows={company.bank} compact />
+          <DetailPanel title="Bank Detail" rows={bankRows(order)} compact />
           <div className="sale-total-box">
             <span>Total</span>
             <strong>{money(commercialTotals.client, order.currency)}</strong>
@@ -1095,7 +1088,6 @@ function ProductTable({ order, items }) {
         <colgroup>
           <col className="col-serial" />
           <col className="col-product" />
-          <col className="col-container" />
           <col className="col-image" />
           <col className="col-pc-weight" />
           <col className="col-pieces" />
@@ -1111,7 +1103,6 @@ function ProductTable({ order, items }) {
           <tr>
             <th rowSpan="2">S#</th>
             <th rowSpan="2">Product Name</th>
-            <th rowSpan="2">Container</th>
             <th rowSpan="2"></th>
             <th colSpan="4">Product Details</th>
             <th colSpan="2">Carton Weight</th>
@@ -1133,7 +1124,6 @@ function ProductTable({ order, items }) {
             <tr key={item.id}>
               <td>{index + 1}</td>
               <td className="product-name">{item.displayName}</td>
-              <td>{order.container_number || `CONTAINER-${index + 1}`}</td>
               <td className="product-image-cell">{item.product_image_url ? <img src={assetUrl(item.product_image_url)} alt="" /> : <div className="product-image-empty">{item.displayName}</div>}</td>
               <td>{item.pcWeight}</td>
               <td>{compactNumber(item.pieces)}</td>
@@ -1149,7 +1139,7 @@ function ProductTable({ order, items }) {
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan="10" className="grand-label">Grand Total:</td>
+            <td colSpan="9" className="grand-label">Grand Total:</td>
             <td>{compactNumber(totalCartons)}</td>
             <td></td>
             <td>{money(totalAmount, order.currency)}</td>
@@ -1246,6 +1236,28 @@ function formatDate(value) {
   return new Date(value).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" }).replace(/ /g, "-");
 }
 
+function documentDate(order) {
+  return order.shipment_date || order.contract_date;
+}
+
+function bankRows(order) {
+  if (!order.bank_account_id) return [["Bank Account", "Not selected"]];
+  return [
+    ["Account", order.bank_account_name],
+    ["Beneficiary", order.bank_beneficiary_name],
+    ["Bank", order.bank_name],
+    ["Branch", order.bank_branch_name],
+    ["A/C", order.bank_account_number],
+    ["Swift", order.bank_swift_code],
+    ["IBAN", order.bank_iban],
+    ["Currency", order.bank_currency],
+    ["Correspondent Bank", order.correspondent_bank],
+    ["Correspondent A/C", order.correspondent_account],
+    ["Correspondent Swift", order.correspondent_swift_code],
+    ["Instructions", order.bank_instructions]
+  ].filter(([, value]) => value);
+}
+
 function formatAddress(...parts) {
   return parts.filter(Boolean).join(", ") || "-";
 }
@@ -1290,6 +1302,23 @@ function packingTotals(items) {
     pouches: packingPouchTotal(items),
     unitLabel: unitLabelText
   };
+}
+
+function containerItemGroups(items) {
+  const groups = new Map();
+  for (const item of items) {
+    const id = item.shipment_container_id || "legacy";
+    if (!groups.has(id)) {
+      groups.set(id, {
+        id,
+        label: item.container_number || "As Per Schedule",
+        lineNumber: Number(item.container_line_number || 1),
+        items: []
+      });
+    }
+    groups.get(id).items.push(item);
+  }
+  return [...groups.values()].sort((left, right) => left.lineNumber - right.lineNumber);
 }
 
 function packingPouchTotal(items) {

@@ -14,6 +14,7 @@ import { LedgerPage } from "./pages/LedgerPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { ShipmentsPage } from "./pages/ShipmentsPage";
 import { ShipmentFormPage } from "./pages/ShipmentFormPage";
+import { BankAccountsPage } from "./pages/BankAccountsPage";
 
 function ProtectedApp() {
   const { user, loading } = useAuth();
@@ -38,10 +39,12 @@ function ProtectedApp() {
             <Route path="/orders/new" element={<OrderFormPage />} />
             <Route path="/orders/:id/edit" element={<OrderFormPage />} />
             <Route path="/shipments/new" element={<ShipmentFormPage />} />
+            <Route path="/shipments/:id/edit" element={<ShipmentFormPage />} />
             <Route path="/ledger" element={<LedgerPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/products" element={<ProductsPage />} />
             <Route path="/parties" element={<PartiesPage />} />
+            <Route path="/bank-accounts" element={<BankAccountsPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/roles" element={<RolesPage />} />
           </>

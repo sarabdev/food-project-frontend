@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Save } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { Plus, Save, Trash2 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { api, messageFromError } from "../lib/api";
 
@@ -8,17 +8,21 @@ const today = new Date().toISOString().slice(0, 10);
 const initialForm = {
   client_id: "", customs_consignee_id: "", shipment_date: today, currency: "USD",
   port_of_loading: "Karachi, Pakistan", port_of_destination: "", final_destination: "",
-  shipping_type: "CAF", shipped_per: "By Sea", container_number: "", container_type: "40 HC",
-  cbm: 0, freight_term: "Freight Prepaid", notes: ""
+  shipping_type: "CAF", shipped_per: "By Sea", freight_term: "Freight Prepaid", notes: ""
 };
+const emptyContainer = { container_number: "", container_type: "40 HC", cbm: 0 };
 
 export function ShipmentFormPage() {
+  const { id } = useParams();
+  const isEditing = Boolean(id);
   const [form, setForm] = useState(initialForm);
   const [parties, setParties] = useState([]);
   const [lines, setLines] = useState([]);
+  const [containers, setContainers] = useState([{ ...emptyContainer }]);
   const [quantities, setQuantities] = useState({});
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(isEditing);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -26,6 +30,7 @@ export function ShipmentFormPage() {
   }, []);
 
   useEffect(() => {
+    if (isEditing) return;
     if (!form.client_id) {
       setLines([]);
       setQuantities({});
@@ -36,32 +41,123 @@ export function ShipmentFormPage() {
       setQuantities({});
       if (data.lines[0]?.currency) setForm((current) => ({ ...current, currency: data.lines[0].currency }));
     });
-  }, [form.client_id]);
+  }, [form.client_id, isEditing]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    let active = true;
+    async function loadShipment() {
+      setLoading(true);
+      setError("");
+      try {
+        const { data } = await api.get(`/shipments/${id}`);
+        const shipment = data.shipment;
+        const { data: availableData } = await api.get("/shipments/available-lines", {
+          params: { client_id: shipment.client_id, shipment_id: id }
+        });
+        if (!active) return;
+        const editableContainers = shipment.containers.map((container) => ({
+          container_number: container.container_number || "",
+          container_type: container.container_type || "",
+          cbm: Number(container.cbm || 0)
+        }));
+        const containerIndexes = new Map(shipment.containers.map((container, index) => [Number(container.id), index]));
+        const editableQuantities = {};
+        for (const item of shipment.items) {
+          const containerIndex = containerIndexes.get(Number(item.shipment_container_id));
+          if (containerIndex !== undefined) {
+            editableQuantities[quantityKey(item.export_order_item_id, containerIndex)] = Number(item.quantity);
+          }
+        }
+        setForm({
+          client_id: String(shipment.client_id),
+          customs_consignee_id: String(shipment.customs_consignee_id),
+          shipment_date: String(shipment.shipment_date || shipment.contract_date).slice(0, 10),
+          currency: shipment.currency || "USD",
+          port_of_loading: shipment.port_of_loading || "",
+          port_of_destination: shipment.port_of_destination || "",
+          final_destination: shipment.final_destination || "",
+          shipping_type: shipment.shipping_type || "",
+          shipped_per: shipment.shipped_per || "",
+          freight_term: shipment.freight_term || "",
+          notes: shipment.notes || ""
+        });
+        setLines(availableData.lines);
+        setContainers(editableContainers.length ? editableContainers : [{ ...emptyContainer }]);
+        setQuantities(editableQuantities);
+      } catch (requestError) {
+        if (active) setError(messageFromError(requestError));
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    loadShipment();
+    return () => { active = false; };
+  }, [id, isEditing]);
 
   const clients = parties.filter((party) => party.party_type === "client");
   const consignees = parties.filter((party) => party.party_type === "customs_consignee");
-  const selected = lines.filter((line) => Number(quantities[line.export_order_item_id] || 0) > 0);
-  const totals = useMemo(() => selected.reduce((sum, line) => {
-    const quantity = Number(quantities[line.export_order_item_id]);
-    return {
-      packages: sum.packages + quantity,
-      net: sum.net + quantity * Number(line.net_weight_per_carton),
-      gross: sum.gross + quantity * Number(line.gross_weight_per_carton),
-      value: sum.value + (line.is_sample ? 0 : quantity * Number(line.client_price_per_carton))
-    };
-  }, { packages: 0, net: 0, gross: 0, value: 0 }), [selected, quantities]);
+  const allocations = useMemo(() => lines.flatMap((line) => containers.map((_, containerIndex) => ({
+    export_order_item_id: line.export_order_item_id,
+    container_index: containerIndex,
+    quantity: Number(quantities[quantityKey(line.export_order_item_id, containerIndex)] || 0),
+    line
+  })).filter((allocation) => allocation.quantity > 0)), [lines, containers, quantities]);
+  const totals = useMemo(() => allocations.reduce((sum, allocation) => ({
+    packages: sum.packages + allocation.quantity,
+    net: sum.net + allocation.quantity * Number(allocation.line.net_weight_per_carton),
+    gross: sum.gross + allocation.quantity * Number(allocation.line.gross_weight_per_carton),
+    value: sum.value + (allocation.line.is_sample ? 0 : allocation.quantity * Number(allocation.line.client_price_per_carton))
+  }), { packages: 0, net: 0, gross: 0, value: 0 }), [allocations]);
+  const allContainersUsed = containers.every((_, index) => allocations.some((allocation) => allocation.container_index === index));
+
+  function addContainer() {
+    setContainers((current) => [...current, { ...emptyContainer }]);
+  }
+
+  function updateContainer(index, field, value) {
+    setContainers((current) => current.map((container, containerIndex) => containerIndex === index ? { ...container, [field]: value } : container));
+  }
+
+  function removeContainer(index) {
+    if (containers.length === 1) return;
+    setContainers((current) => current.filter((_, containerIndex) => containerIndex !== index));
+    setQuantities((current) => {
+      const revised = {};
+      for (const [key, value] of Object.entries(current)) {
+        const [lineId, containerIndexText] = key.split(":");
+        const containerIndex = Number(containerIndexText);
+        if (containerIndex === index) continue;
+        revised[quantityKey(lineId, containerIndex > index ? containerIndex - 1 : containerIndex)] = value;
+      }
+      return revised;
+    });
+  }
+
+  function updateQuantity(line, containerIndex, value) {
+    const otherAllocated = containers.reduce((sum, _, index) => index === containerIndex
+      ? sum
+      : sum + Number(quantities[quantityKey(line.export_order_item_id, index)] || 0), 0);
+    const maximum = Math.max(0, Number(line.remaining_quantity) - otherAllocated);
+    const numeric = value === "" ? "" : Math.min(Number(value), maximum);
+    setQuantities((current) => ({ ...current, [quantityKey(line.export_order_item_id, containerIndex)]: numeric }));
+  }
 
   async function save(event) {
     event.preventDefault();
     setSaving(true);
     setError("");
     try {
-      const allocations = selected.map((line) => ({
-        export_order_item_id: line.export_order_item_id,
-        quantity: Number(quantities[line.export_order_item_id])
+      const payloadAllocations = allocations.map(({ export_order_item_id, container_index, quantity }) => ({
+        export_order_item_id, container_index, quantity
       }));
-      const { data } = await api.post("/shipments", { ...form, allocations });
-      navigate(`/shipments/${data.id}`);
+      if (isEditing) {
+        await api.put(`/shipments/${id}`, { ...form, containers, allocations: payloadAllocations });
+        navigate(`/shipments/${id}`);
+      } else {
+        const { data } = await api.post("/shipments", { ...form, containers, allocations: payloadAllocations });
+        navigate(`/shipments/${data.id}`);
+      }
     } catch (requestError) {
       setError(messageFromError(requestError));
     } finally {
@@ -69,38 +165,63 @@ export function ShipmentFormPage() {
     }
   }
 
+  if (loading) return <div className="py-20 text-center text-slate-400">Loading shipment...</div>;
+
   return (
     <>
-      <PageHeader eyebrow="Fulfillment" title="Create consolidated shipment" description="Select the exact remaining quantities to dispatch from any of this client's sales contracts." action={<Link to="/shipments" className="btn-secondary">Cancel</Link>} />
+      <PageHeader eyebrow="Fulfillment" title={isEditing ? "Edit shipment" : "Create consolidated shipment"} description="Add every container, then distribute the client's available contract quantities across them." action={<Link to={isEditing ? `/shipments/${id}` : "/shipments"} className="btn-secondary">Cancel</Link>} />
       <form onSubmit={save}>
         <section className="panel p-5 md:p-7">
           <h2 className="mb-5 font-bold">Shipment details</h2>
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-            <SelectField label="Actual client" value={form.client_id} onChange={(value) => setForm({ ...form, client_id: value })} options={clients} required />
+            <SelectField label="Actual client" value={form.client_id} onChange={(value) => setForm({ ...form, client_id: value })} options={clients} required disabled={isEditing} />
             <SelectField label="Customs / B/L consignee" value={form.customs_consignee_id} onChange={(value) => setForm({ ...form, customs_consignee_id: value })} options={consignees} required />
-            <TextField label="Shipment date" type="date" value={form.shipment_date} onChange={(value) => setForm({ ...form, shipment_date: value })} required />
-            <TextField label="Container number" value={form.container_number} onChange={(value) => setForm({ ...form, container_number: value })} />
+            <TextField label="Document date" type="date" value={form.shipment_date} onChange={(value) => setForm({ ...form, shipment_date: value })} required />
             <TextField label="Port of loading" value={form.port_of_loading} onChange={(value) => setForm({ ...form, port_of_loading: value })} />
             <TextField label="Port of destination" value={form.port_of_destination} onChange={(value) => setForm({ ...form, port_of_destination: value })} />
             <TextField label="Final destination" value={form.final_destination} onChange={(value) => setForm({ ...form, final_destination: value })} />
-            <TextField label="Container type" value={form.container_type} onChange={(value) => setForm({ ...form, container_type: value })} />
+            <TextField label="Shipped per" value={form.shipped_per} onChange={(value) => setForm({ ...form, shipped_per: value })} />
           </div>
         </section>
+
         <section className="panel mt-6 overflow-hidden">
-          <div className="border-b px-5 py-4 md:px-7"><h2 className="font-bold">Available contract quantities</h2><p className="mt-1 text-xs text-slate-500">Enter zero for lines not included in this shipment.</p></div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4 md:px-7">
+            <div><h2 className="font-bold">Containers</h2><p className="mt-1 text-xs text-slate-500">Container numbers must be unique within this shipment.</p></div>
+            <button type="button" className="btn-secondary" onClick={addContainer}><Plus size={17} /> Add container</button>
+          </div>
+          <div className="grid gap-4 p-5 lg:grid-cols-2">
+            {containers.map((container, index) => (
+              <div key={index} className="rounded-xl border border-slate-200 p-4">
+                <div className="mb-4 flex items-center justify-between"><div><h3 className="font-bold">Container {index + 1}</h3><p className="mt-1 text-xs text-slate-400">{allocations.filter((allocation) => allocation.container_index === index).reduce((sum, allocation) => sum + allocation.quantity, 0).toLocaleString()} packages assigned</p></div>{containers.length > 1 && <button type="button" aria-label={`Remove container ${index + 1}`} className="rounded-lg p-2 text-red-600 hover:bg-red-50" onClick={() => removeContainer(index)}><Trash2 size={17} /></button>}</div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <TextField label="Container number" value={container.container_number} onChange={(value) => updateContainer(index, "container_number", value)} required />
+                  <TextField label="Container type" value={container.container_type} onChange={(value) => updateContainer(index, "container_type", value)} />
+                  <TextField label="CBM" type="number" value={container.cbm} onChange={(value) => updateContainer(index, "cbm", value)} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel mt-6 overflow-hidden">
+          <div className="border-b px-5 py-4 md:px-7"><h2 className="font-bold">Allocate products to containers</h2><p className="mt-1 text-xs text-slate-500">A product can be split across containers, but the combined quantity cannot exceed its remaining contract quantity.</p></div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Sales contract</th><th className="px-5 py-3">Product</th><th className="px-5 py-3">Contracted</th><th className="px-5 py-3">Previously allocated</th><th className="px-5 py-3">Remaining</th><th className="px-5 py-3">Ship now</th></tr></thead>
-              <tbody className="divide-y">{lines.map((line) => (
-                <tr key={line.export_order_item_id}>
-                  <td className="px-5 py-4"><div className="font-semibold">{line.contract_number}</div><div className="text-xs text-slate-400">{new Date(line.contract_date).toLocaleDateString()}</div></td>
-                  <td className="px-5 py-4">{line.product_name}{line.is_sample ? " (sample)" : ""}</td>
-                  <td className="px-5 py-4">{Number(line.contract_quantity).toLocaleString()}</td>
-                  <td className="px-5 py-4">{Number(line.allocated_quantity).toLocaleString()}</td>
-                  <td className="px-5 py-4 font-bold text-forest-700">{Number(line.remaining_quantity).toLocaleString()}</td>
-                  <td className="px-5 py-4"><input className="field w-32" type="number" min="0" step="0.001" max={line.remaining_quantity} value={quantities[line.export_order_item_id] || ""} placeholder="0" onChange={(event) => setQuantities({ ...quantities, [line.export_order_item_id]: event.target.value })} /></td>
-                </tr>
-              ))}</tbody>
+            <table className="w-full text-left text-sm" style={{ minWidth: `${760 + containers.length * 150}px` }}>
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Sales contract</th><th className="px-4 py-3">Product</th><th className="px-4 py-3">Remaining</th>{containers.map((container, index) => <th key={index} className="px-4 py-3"><div>{container.container_number || `Container ${index + 1}`}</div><div className="mt-1 font-normal normal-case text-slate-400">{container.container_type || "Type not set"}</div></th>)}<th className="px-4 py-3">Allocated</th></tr></thead>
+              <tbody className="divide-y">{lines.map((line) => {
+                const allocatedNow = containers.reduce((sum, _, index) => sum + Number(quantities[quantityKey(line.export_order_item_id, index)] || 0), 0);
+                return <tr key={line.export_order_item_id}>
+                  <td className="px-4 py-4"><div className="font-semibold">{line.contract_number}</div><div className="text-xs text-slate-400">{new Date(line.contract_date).toLocaleDateString()}</div></td>
+                  <td className="px-4 py-4">{line.product_name}{line.is_sample ? " (sample)" : ""}</td>
+                  <td className="px-4 py-4"><div className="font-bold text-forest-700">{Number(line.remaining_quantity).toLocaleString()}</div><div className="text-xs text-slate-400">of {Number(line.contract_quantity).toLocaleString()}</div></td>
+                  {containers.map((_, containerIndex) => {
+                    const key = quantityKey(line.export_order_item_id, containerIndex);
+                    const otherAllocated = allocatedNow - Number(quantities[key] || 0);
+                    return <td key={containerIndex} className="px-4 py-4"><input aria-label={`${line.product_name} quantity in container ${containerIndex + 1}`} className="field w-28" type="number" min="0" step="0.001" max={Math.max(0, Number(line.remaining_quantity) - otherAllocated)} value={quantities[key] || ""} placeholder="0" onChange={(event) => updateQuantity(line, containerIndex, event.target.value)} /></td>;
+                  })}
+                  <td className="px-4 py-4"><span className={allocatedNow > 0 ? "font-bold text-forest-700" : "text-slate-400"}>{allocatedNow.toLocaleString()}</span></td>
+                </tr>;
+              })}</tbody>
             </table>
           </div>
           {form.client_id && !lines.length && <div className="py-12 text-center text-sm text-slate-400">This client has no remaining contract quantities.</div>}
@@ -108,12 +229,13 @@ export function ShipmentFormPage() {
           <div className="grid gap-3 border-t bg-forest-50 p-5 text-sm sm:grid-cols-2 lg:grid-cols-4"><Summary label="Packages" value={totals.packages.toLocaleString()} /><Summary label="Net weight" value={`${totals.net.toLocaleString()} kg`} /><Summary label="Gross weight" value={`${totals.gross.toLocaleString()} kg`} /><Summary label="Shipment value" value={`${form.currency} ${totals.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} /></div>
         </section>
         {error && <div className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}
-        <div className="mt-6 flex justify-end"><button disabled={saving || !selected.length} className="btn-primary px-6"><Save size={18} /> {saving ? "Creating..." : "Create shipment"}</button></div>
+        <div className="mt-6 flex justify-end"><button disabled={saving || !allocations.length || !allContainersUsed || containers.some((container) => !container.container_number.trim())} className="btn-primary px-6"><Save size={18} /> {saving ? (isEditing ? "Updating..." : "Creating...") : (isEditing ? "Update shipment" : "Create shipment")}</button></div>
       </form>
     </>
   );
 }
 
-function TextField({ label, value, onChange, type = "text", required }) { return <label><span className="label">{label}</span><input className="field" required={required} type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
-function SelectField({ label, value, onChange, options, required }) { return <label><span className="label">{label}</span><select className="field" required={required} value={value} onChange={(event) => onChange(event.target.value)}><option value="">Select...</option>{options.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>; }
+function quantityKey(lineId, containerIndex) { return `${lineId}:${containerIndex}`; }
+function TextField({ label, value, onChange, type = "text", required }) { return <label><span className="label">{label}</span><input className="field" required={required} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.001" : undefined} type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
+function SelectField({ label, value, onChange, options, required, disabled = false }) { return <label><span className="label">{label}</span><select className="field disabled:cursor-not-allowed disabled:bg-slate-100" required={required} disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)}><option value="">Select...</option>{options.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>; }
 function Summary({ label, value }) { return <div><div className="text-xs font-bold uppercase tracking-wide text-forest-600">{label}</div><div className="mt-1 text-lg font-bold text-forest-900">{value}</div></div>; }

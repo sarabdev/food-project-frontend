@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import {
-  BarChart3, Boxes, ChevronRight, FileStack, LayoutDashboard, Landmark, LogOut,
+  BarChart3, Boxes, ChevronRight, CreditCard, FileStack, LayoutDashboard, Landmark, LogOut,
   Menu, PackageCheck, ShieldCheck, Truck, UserRoundCog, UsersRound, X
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -14,6 +14,7 @@ const navigation = [
   { to: "/reports", label: "Reports", icon: BarChart3, permission: "reports.view" },
   { to: "/products", label: "Products", icon: Boxes, permission: "products.view" },
   { to: "/parties", label: "Business Parties", icon: Truck, permission: "parties.view" },
+  { to: "/bank-accounts", label: "Bank Accounts", icon: CreditCard, permission: "bank_accounts.view" },
   { to: "/users", label: "Users", icon: UsersRound, permission: "users.view" },
   { to: "/roles", label: "Roles & Access", icon: ShieldCheck, permission: "roles.manage" }
 ];
