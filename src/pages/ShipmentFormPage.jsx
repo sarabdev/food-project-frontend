@@ -7,7 +7,7 @@ import { api, messageFromError } from "../lib/api";
 const today = new Date().toISOString().slice(0, 10);
 const initialForm = {
   client_id: "", customs_consignee_id: "", also_notify_party_id: "", shipment_date: today, currency: "USD",
-  gd_number: "", fi_number: "",
+  customs_reference_type: "gd", customs_reference_number: "",
   port_of_loading: "Karachi, Pakistan", port_of_destination: "", final_destination: "",
   shipping_type: "CAF", shipped_per: "By Sea", vessel_name: "", voyage_number: "",
   bl_number: "", bl_date: "",
@@ -21,6 +21,7 @@ export function ShipmentFormPage() {
   const [form, setForm] = useState(initialForm);
   const [parties, setParties] = useState([]);
   const [lines, setLines] = useState([]);
+  const [selectedContractIds, setSelectedContractIds] = useState([]);
   const [containers, setContainers] = useState([{ ...emptyContainer }]);
   const [quantities, setQuantities] = useState({});
   const [error, setError] = useState("");
@@ -36,11 +37,13 @@ export function ShipmentFormPage() {
     if (isEditing) return;
     if (!form.client_id) {
       setLines([]);
+      setSelectedContractIds([]);
       setQuantities({});
       return;
     }
     api.get("/shipments/available-lines", { params: { client_id: form.client_id } }).then(({ data }) => {
       setLines(data.lines);
+      setSelectedContractIds([]);
       setQuantities({});
       if (data.lines[0]?.currency) setForm((current) => ({ ...current, currency: data.lines[0].currency }));
     });
@@ -77,8 +80,8 @@ export function ShipmentFormPage() {
           customs_consignee_id: String(shipment.customs_consignee_id),
           also_notify_party_id: shipment.also_notify_party_id ? String(shipment.also_notify_party_id) : "",
           shipment_date: String(shipment.shipment_date || shipment.contract_date).slice(0, 10),
-          gd_number: shipment.gd_number || "",
-          fi_number: shipment.fi_number || "",
+          customs_reference_type: shipment.fi_number && !shipment.gd_number ? "fi" : "gd",
+          customs_reference_number: shipment.fi_number && !shipment.gd_number ? shipment.fi_number : shipment.gd_number || "",
           currency: shipment.currency || "USD",
           port_of_loading: shipment.port_of_loading || "",
           port_of_destination: shipment.port_of_destination || "",
@@ -93,6 +96,7 @@ export function ShipmentFormPage() {
           notes: shipment.notes || ""
         });
         setLines(availableData.lines);
+        setSelectedContractIds([...new Set(shipment.items.map((item) => Number(item.contract_id)))]);
         setContainers(editableContainers.length ? editableContainers : [{ ...emptyContainer }]);
         setQuantities(editableQuantities);
       } catch (requestError) {
@@ -108,12 +112,37 @@ export function ShipmentFormPage() {
   const clients = parties.filter((party) => party.party_type === "client");
   const consignees = parties.filter((party) => party.party_type === "customs_consignee");
   const notifyParties = parties.filter((party) => party.party_type === "notify_party");
-  const allocations = useMemo(() => lines.flatMap((line) => containers.map((_, containerIndex) => ({
+  const contracts = useMemo(() => {
+    const contractsById = new Map();
+    for (const line of lines) {
+      const contractId = Number(line.contract_id);
+      if (!contractsById.has(contractId)) {
+        contractsById.set(contractId, {
+          id: contractId,
+          number: line.contract_number,
+          date: line.contract_date,
+          currency: line.currency,
+          availablePackages: 0,
+          productCount: 0
+        });
+      }
+      const contract = contractsById.get(contractId);
+      contract.availablePackages += Number(line.remaining_quantity);
+      contract.productCount += 1;
+    }
+    return [...contractsById.values()];
+  }, [lines]);
+  const selectedContractIdSet = useMemo(() => new Set(selectedContractIds), [selectedContractIds]);
+  const visibleLines = useMemo(
+    () => lines.filter((line) => selectedContractIdSet.has(Number(line.contract_id))),
+    [lines, selectedContractIdSet]
+  );
+  const allocations = useMemo(() => visibleLines.flatMap((line) => containers.map((_, containerIndex) => ({
     export_order_item_id: line.export_order_item_id,
     container_index: containerIndex,
     quantity: Number(quantities[quantityKey(line.export_order_item_id, containerIndex)] || 0),
     line
-  })).filter((allocation) => allocation.quantity > 0)), [lines, containers, quantities]);
+  })).filter((allocation) => allocation.quantity > 0)), [visibleLines, containers, quantities]);
   const totals = useMemo(() => allocations.reduce((sum, allocation) => ({
     packages: sum.packages + allocation.quantity,
     net: sum.net + allocation.quantity * Number(allocation.line.net_weight_per_carton),
@@ -124,6 +153,26 @@ export function ShipmentFormPage() {
 
   function addContainer() {
     setContainers((current) => [...current, { ...emptyContainer }]);
+  }
+
+  function toggleContract(contractId) {
+    const isSelected = selectedContractIdSet.has(contractId);
+    setSelectedContractIds((current) => isSelected
+      ? current.filter((currentId) => currentId !== contractId)
+      : [...current, contractId]);
+    if (isSelected) {
+      const removedLineIds = new Set(lines
+        .filter((line) => Number(line.contract_id) === contractId)
+        .map((line) => String(line.export_order_item_id)));
+      setQuantities((current) => Object.fromEntries(
+        Object.entries(current).filter(([key]) => !removedLineIds.has(key.split(":")[0]))
+      ));
+    }
+  }
+
+  function clearContracts() {
+    setSelectedContractIds([]);
+    setQuantities({});
   }
 
   function updateContainer(index, field, value) {
@@ -162,11 +211,19 @@ export function ShipmentFormPage() {
       const payloadAllocations = allocations.map(({ export_order_item_id, container_index, quantity }) => ({
         export_order_item_id, container_index, quantity
       }));
+      const { customs_reference_type, customs_reference_number, ...shipmentFields } = form;
+      const payload = {
+        ...shipmentFields,
+        gd_number: customs_reference_type === "gd" ? customs_reference_number : null,
+        fi_number: customs_reference_type === "fi" ? customs_reference_number : null,
+        containers,
+        allocations: payloadAllocations
+      };
       if (isEditing) {
-        await api.put(`/shipments/${id}`, { ...form, containers, allocations: payloadAllocations });
+        await api.put(`/shipments/${id}`, payload);
         navigate(`/shipments/${id}`);
       } else {
-        const { data } = await api.post("/shipments", { ...form, containers, allocations: payloadAllocations });
+        const { data } = await api.post("/shipments", payload);
         navigate(`/shipments/${data.id}`);
       }
     } catch (requestError) {
@@ -180,7 +237,7 @@ export function ShipmentFormPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Fulfillment" title={isEditing ? "Edit shipment" : "Create consolidated shipment"} description="Add every container, then distribute the client's available contract quantities across them." action={<Link to={isEditing ? `/shipments/${id}` : "/shipments"} className="btn-secondary">Cancel</Link>} />
+      <PageHeader eyebrow="Fulfillment" title={isEditing ? "Edit shipment" : "Create consolidated shipment"} description="Select a client and their sales contracts, then allocate the required product quantities across containers." action={<Link to={isEditing ? `/shipments/${id}` : "/shipments"} className="btn-secondary">Cancel</Link>} />
       <form onSubmit={save}>
         <section className="panel p-5 md:p-7">
           <h2 className="mb-5 font-bold">Shipment details</h2>
@@ -189,8 +246,8 @@ export function ShipmentFormPage() {
             <SelectField label="Customs / B/L consignee" value={form.customs_consignee_id} onChange={(value) => setForm({ ...form, customs_consignee_id: value })} options={consignees} required />
             <SelectField label="Also notify party" value={form.also_notify_party_id} onChange={(value) => setForm({ ...form, also_notify_party_id: value })} options={notifyParties} />
             <TextField label="Document date" type="date" value={form.shipment_date} onChange={(value) => setForm({ ...form, shipment_date: value })} required />
-            <TextField label="G.D. No." value={form.gd_number} onChange={(value) => setForm({ ...form, gd_number: value })} />
-            <TextField label="FI No." value={form.fi_number} onChange={(value) => setForm({ ...form, fi_number: value })} />
+            <label><span className="label">Customs reference type</span><select className="field" value={form.customs_reference_type} onChange={(event) => setForm({ ...form, customs_reference_type: event.target.value, customs_reference_number: "" })}><option value="gd">G.D. No.</option><option value="fi">FI No.</option></select></label>
+            <TextField label={form.customs_reference_type === "gd" ? "G.D. No." : "FI No."} value={form.customs_reference_number} onChange={(value) => setForm({ ...form, customs_reference_number: value })} />
             <TextField label="Port of loading" value={form.port_of_loading} onChange={(value) => setForm({ ...form, port_of_loading: value })} />
             <TextField label="Port of destination" value={form.port_of_destination} onChange={(value) => setForm({ ...form, port_of_destination: value })} />
             <TextField label="Final destination" value={form.final_destination} onChange={(value) => setForm({ ...form, final_destination: value })} />
@@ -200,6 +257,26 @@ export function ShipmentFormPage() {
             <TextField label="B/L No." value={form.bl_number} onChange={(value) => setForm({ ...form, bl_number: value })} />
             <TextField label="B/L Date" type="date" value={form.bl_date} onChange={(value) => setForm({ ...form, bl_date: value })} />
           </div>
+        </section>
+
+        <section className="panel mt-6 overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4 md:px-7">
+            <div><h2 className="font-bold">Select sales contracts</h2><p className="mt-1 text-xs text-slate-500">Only open contracts belonging to the selected client are available.</p></div>
+            {!!contracts.length && <div className="flex gap-2"><button type="button" className="btn-secondary" onClick={() => setSelectedContractIds(contracts.map((contract) => contract.id))}>Select all</button><button type="button" className="btn-secondary" onClick={clearContracts}>Clear</button></div>}
+          </div>
+          {!!contracts.length && <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
+            {contracts.map((contract) => {
+              const selected = selectedContractIdSet.has(contract.id);
+              return <label key={contract.id} className={`cursor-pointer rounded-xl border p-4 transition ${selected ? "border-forest-500 bg-forest-50 ring-1 ring-forest-500" : "border-slate-200 hover:border-forest-300"}`}>
+                <div className="flex items-start gap-3">
+                  <input className="mt-1 h-4 w-4 accent-forest-700" type="checkbox" checked={selected} onChange={() => toggleContract(contract.id)} />
+                  <div className="min-w-0"><div className="font-bold">{contract.number}</div><div className="mt-1 text-xs text-slate-500">{new Date(contract.date).toLocaleDateString()} · {contract.productCount} product{contract.productCount === 1 ? "" : "s"}</div><div className="mt-2 text-sm font-semibold text-forest-700">{contract.availablePackages.toLocaleString()} packages available</div></div>
+                </div>
+              </label>;
+            })}
+          </div>}
+          {!form.client_id && <div className="py-12 text-center text-sm text-slate-400">Select a client first to see their open sales contracts.</div>}
+          {form.client_id && !contracts.length && <div className="py-12 text-center text-sm text-slate-400">This client has no remaining quantities on open sales contracts.</div>}
         </section>
 
         <section className="panel mt-6 overflow-hidden">
@@ -226,7 +303,7 @@ export function ShipmentFormPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm" style={{ minWidth: `${760 + containers.length * 150}px` }}>
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Sales contract</th><th className="px-4 py-3">Product</th><th className="px-4 py-3">Remaining</th>{containers.map((container, index) => <th key={index} className="px-4 py-3"><div>{container.container_number || `Container ${index + 1}`}</div><div className="mt-1 font-normal normal-case text-slate-400">{container.container_type || "Type not set"}</div></th>)}<th className="px-4 py-3">Allocated</th></tr></thead>
-              <tbody className="divide-y">{lines.map((line) => {
+              <tbody className="divide-y">{visibleLines.map((line) => {
                 const allocatedNow = containers.reduce((sum, _, index) => sum + Number(quantities[quantityKey(line.export_order_item_id, index)] || 0), 0);
                 return <tr key={line.export_order_item_id}>
                   <td className="px-4 py-4"><div className="font-semibold">{line.contract_number}</div><div className="text-xs text-slate-400">{new Date(line.contract_date).toLocaleDateString()}</div></td>
@@ -242,8 +319,9 @@ export function ShipmentFormPage() {
               })}</tbody>
             </table>
           </div>
-          {form.client_id && !lines.length && <div className="py-12 text-center text-sm text-slate-400">This client has no remaining contract quantities.</div>}
-          {!form.client_id && <div className="py-12 text-center text-sm text-slate-400">Select a client to see their open sales contract lines.</div>}
+          {form.client_id && !!contracts.length && !selectedContractIds.length && <div className="py-12 text-center text-sm text-slate-400">Select one or more sales contracts above to choose their products.</div>}
+          {form.client_id && !contracts.length && <div className="py-12 text-center text-sm text-slate-400">This client has no remaining contract quantities.</div>}
+          {!form.client_id && <div className="py-12 text-center text-sm text-slate-400">Select a client, then choose one or more sales contracts.</div>}
           <div className="grid gap-3 border-t bg-forest-50 p-5 text-sm sm:grid-cols-2 lg:grid-cols-4"><Summary label="Packages" value={totals.packages.toLocaleString()} /><Summary label="Net weight" value={`${totals.net.toLocaleString()} kg`} /><Summary label="Gross weight" value={`${totals.gross.toLocaleString()} kg`} /><Summary label="Shipment value" value={`${form.currency} ${totals.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} /></div>
         </section>
         {error && <div className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</div>}

@@ -204,8 +204,7 @@ export function OrderDetailsPage({ entityType = "orders" }) {
               {isShipment
                 ? <Info label={order.containers?.length > 1 ? "Containers" : "Container"} value={order.containers?.length ? order.containers.map((container) => `${container.container_number}${container.container_type ? ` (${container.container_type})` : ""}`).join(", ") : [order.container_number, order.container_type].filter(Boolean).join(" / ") || "Not assigned"} />
                 : <Info label="Valid until" value={order.valid_until ? new Date(order.valid_until).toLocaleDateString() : "Not specified"} />}
-              {isShipment && <Info label="G.D. No." value={order.gd_number || "Not entered"} />}
-              {isShipment && <Info label="FI No." value={order.fi_number || "Not entered"} />}
+              {isShipment && <Info label={shipmentCustomsReference(order).label} value={shipmentCustomsReference(order).value || "Not entered"} />}
               {isShipment && <Info label="Vessel / Voyage" value={[order.vessel_name, order.voyage_number].filter(Boolean).join(" / ") || "Not entered"} />}
               {isShipment && <Info label="B/L No. / Date" value={[order.bl_number, order.bl_date ? new Date(order.bl_date).toLocaleDateString() : ""].filter(Boolean).join(" / ") || "Not entered"} />}
               {isShipment && <Info label="Also notify party" value={order.also_notify_party_name || "Not selected"} />}
@@ -463,8 +462,7 @@ function BLInstructionsDocument({ order, totals }) {
             </div>
           ))}
           <div className="bl-reference">
-            <span><strong>G.D NO.</strong>&nbsp;&nbsp;{order.gd_number || "-"}</span>
-            <span><strong>FI NO.</strong>&nbsp;&nbsp;{order.fi_number || "-"}</span>
+            <span><strong>{shipmentCustomsReference(order).documentLabel}</strong>&nbsp;&nbsp;{shipmentCustomsReference(order).value || "-"}</span>
             <span><strong>Export Reference:</strong>&nbsp;&nbsp;{order.invoice_number}</span>
           </div>
           <div className="bl-free-days">
@@ -649,7 +647,7 @@ function CommercialInvoiceDocument({ order, documentType }) {
           <span>{consignee.name || "-"}</span>
           <span>{formatAddress(consignee.address, consignee.city, consignee.country)}</span>
         </div>
-        <div className="invoice-gd"><strong>G.D NO.</strong> {order.gd_number || "-"}<br /><strong>FI NO.</strong> {order.fi_number || "-"}</div>
+        <div className="invoice-gd"><strong>{shipmentCustomsReference(order).documentLabel}</strong> {shipmentCustomsReference(order).value || "-"}</div>
         <div className="invoice-title-block">
           <h1>COMMERCIAL INVOICE</h1>
           <InfoRows rows={[
@@ -668,7 +666,7 @@ function CommercialInvoiceDocument({ order, documentType }) {
         <MetaText label="DATED" value={formatDate(order.bl_date) || " "} />
         <MetaText label="Shipping Marks & No(s)" value="Order:" />
         <MetaText label="Payment Term" value={order.payment_term || "OPEN ACCOUNT"} />
-        <MetaText label="Sales Contract" value={order.sales_contract_number || order.invoice_number} />
+        <MetaText label="Sales Contract" value={salesContractCodes(order)} />
         <MetaText label="Date of Issue" value={formatDate(order.valid_until || order.contract_date)} />
         <MetaText label="Container Number" value={order.container_number || "As Per Schedule"} />
       </section>
@@ -821,7 +819,7 @@ function PackingWeightListDocument({ order, documentType }) {
           <span>{consignee.name || "-"}</span>
           <span>{formatAddress(consignee.address, consignee.city, consignee.country)}</span>
         </div>
-        <div className="packing-gd"><strong>G.D NO.</strong> {order.gd_number || "-"}<br /><strong>FI NO.</strong> {order.fi_number || "-"}</div>
+        <div className="packing-gd"><strong>{shipmentCustomsReference(order).documentLabel}</strong> {shipmentCustomsReference(order).value || "-"}</div>
         <div className="packing-title-block">
           <h1>{isClientPackingList ? "PACKING LIST" : "PACKING / WEIGHT LIST"}</h1>
           <InfoRows rows={[
@@ -838,7 +836,7 @@ function PackingWeightListDocument({ order, documentType }) {
         <MetaText label="Shipping Marks & No(s)" value="Order" />
         {isClientPackingList && <MetaText label="B/L NUM" value={order.bl_number || " "} />}
         {isClientPackingList && <MetaText label="Dated" value={formatDate(order.bl_date) || " "} />}
-        <MetaText label="Sales Contract" value={order.sales_contract_number || order.invoice_number} />
+        <MetaText label="Sales Contract" value={salesContractCodes(order)} />
         <MetaText label="Date of Issue" value={formatDate(order.valid_until || order.contract_date)} />
         <MetaText label="Container Number" value={containerLabel} />
         {!isClientPackingList && <MetaText label="Packing" value="Export Standard Cartons Packing." wide />}
@@ -1351,6 +1349,23 @@ function unitShortLabel(value) {
   if (unit.includes("BAG")) return "BAGS";
   if (unit.includes("CTN") || unit.includes("CARTON")) return "CTN";
   return unit;
+}
+
+function salesContractCodes(order) {
+  const itemCodes = [...new Set(
+    (order.items || []).map((item) => String(item.contract_number || "").trim()).filter(Boolean)
+  )];
+  if (itemCodes.length) return itemCodes.join(", ");
+  const aggregatedCodes = String(order.sales_contract_number || "").trim();
+  const shipmentCodes = new Set([order.shipment_number, order.invoice_number].map(String));
+  return aggregatedCodes && !shipmentCodes.has(aggregatedCodes) ? aggregatedCodes : "-";
+}
+
+function shipmentCustomsReference(order) {
+  if (order.fi_number && !order.gd_number) {
+    return { label: "FI No.", documentLabel: "FI NO.", value: order.fi_number };
+  }
+  return { label: "G.D. No.", documentLabel: "G.D NO.", value: order.gd_number || "" };
 }
 
 function compactNumber(value) {
