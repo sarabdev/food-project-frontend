@@ -845,7 +845,7 @@ function PackingWeightListDocument({ order, documentType }) {
       <h2 className="packing-section-title">PACKING / WEIGHT DETAILS</h2>
       <PackingDetailsTable items={order.items} commercialItems={commercialItems} sampleItems={sampleItems} commercialTotals={commercialTotals} sampleTotals={sampleTotals} isClientPackingList={isClientPackingList} />
 
-      <PackingSummary order={order} containerLabel={containerLabel} grandTotals={grandTotals} isClientPackingList={isClientPackingList} />
+      <PackingSummary order={order} grandTotals={grandTotals} isClientPackingList={isClientPackingList} />
 
       <section className="packing-origin">
         <strong>"This is to Certify that Goods are of Pakistan Origin."</strong>
@@ -951,11 +951,11 @@ function PackingLine({ item, index }) {
   );
 }
 
-function PackingSummary({ order, containerLabel, grandTotals, isClientPackingList }) {
+function PackingSummary({ order, grandTotals, isClientPackingList }) {
   const groups = containerItemGroups(order.items);
   return (
     <section className="packing-summary">
-      <h2>SUMMERY OF PACKING / WEIGHT DETAILS</h2>
+      <h2>SUMMARY OF PACKING / WEIGHT DETAILS</h2>
       <table>
         <thead>
           <tr>
@@ -971,7 +971,7 @@ function PackingSummary({ order, containerLabel, grandTotals, isClientPackingLis
             const totals = packingTotals(group.items);
             return <tr key={group.id}><td>{group.label}</td><td>{compactNumber(totals.packages)}</td><td>{number(totals.net)} KGS</td><td>{number(totals.gross)} KGS</td>{isClientPackingList && <td>{compactNumber(totals.pouches)}</td>}</tr>;
           })}
-          <tr><td><strong>{groups.length > 1 ? "GRAND TOTAL" : containerLabel}</strong></td><td><strong>{compactNumber(grandTotals.packages)}</strong></td><td><strong>{number(grandTotals.net)} KGS</strong></td><td><strong>{number(grandTotals.gross)} KGS</strong></td>{isClientPackingList && <td><strong>{compactNumber(grandTotals.pouches)}</strong></td>}</tr>
+          {groups.length > 1 && <tr><td><strong>GRAND TOTAL</strong></td><td><strong>{compactNumber(grandTotals.packages)}</strong></td><td><strong>{number(grandTotals.net)} KGS</strong></td><td><strong>{number(grandTotals.gross)} KGS</strong></td>{isClientPackingList && <td><strong>{compactNumber(grandTotals.pouches)}</strong></td>}</tr>}
         </tbody>
       </table>
     </section>
