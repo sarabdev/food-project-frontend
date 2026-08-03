@@ -4,6 +4,7 @@ import { Edit3, FileText, Printer, Save, Trash2, Truck } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { Modal } from "../components/Modal";
+import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
 import { api, assetUrl, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -55,6 +56,9 @@ export function OrderDetailsPage({ entityType = "orders" }) {
   const [gatePassForm, setGatePassForm] = useState(emptyGatePass);
   const [gatePassError, setGatePassError] = useState("");
   const [gatePassSaving, setGatePassSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const { can } = useAuth();
   const isShipment = entityType === "shipments";
   const endpoint = `/${entityType}/${id}`;
@@ -81,7 +85,7 @@ export function OrderDetailsPage({ entityType = "orders" }) {
 
   if (!order) return <div className="py-20 text-center text-slate-400">Loading order...</div>;
   const canEditOrder = can("orders.edit") && !["shipped", "completed", "cancelled"].includes(order.status);
-  const canDeleteOrder = !isShipment && can("orders.delete") && !["shipped", "completed"].includes(order.status);
+  const canDeleteRecord = can("orders.delete") && !["shipped", "completed"].includes(order.status);
   const canEditGatePass = canEditGatePassPermission && !["shipped", "completed", "cancelled"].includes(order.status);
   const canViewGatePass = can("documents.preview") || can("gate_pass.view");
   const canPrintGatePass = can("documents.print") || can("gate_pass.print");
@@ -152,10 +156,21 @@ export function OrderDetailsPage({ entityType = "orders" }) {
     window.print();
   }
 
-  async function deleteOrder() {
-    if (!window.confirm(`Delete order ${order.invoice_number}? This cannot be undone.`)) return;
-    await api.delete(`/orders/${order.id}`);
-    navigate("/orders");
+  function requestDelete() {
+    setDeleteError("");
+    setDeleteOpen(true);
+  }
+
+  async function deleteRecord() {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await api.delete(endpoint);
+      navigate(isShipment ? "/shipments" : "/orders");
+    } catch (requestError) {
+      setDeleteError(messageFromError(requestError));
+      setDeleting(false);
+    }
   }
 
   return (
@@ -164,8 +179,9 @@ export function OrderDetailsPage({ entityType = "orders" }) {
         eyebrow={isShipment ? "Consolidated shipment" : "Sales contract"}
         title={order.invoice_number}
         description={`${order.client_name} - ${new Date(order.contract_date).toLocaleDateString()}${isShipment && order.sales_contract_number ? ` - Contracts: ${order.sales_contract_number}` : ""}`}
-        action={<div className="flex flex-wrap items-center gap-3">{canEditOrder && <Link to={isShipment ? `/shipments/${order.id}/edit` : `/orders/${order.id}/edit`} className="btn-secondary"><Edit3 size={18} /> {isShipment ? "Edit shipment" : "Edit order"}</Link>}{canDeleteOrder && <button type="button" onClick={deleteOrder} className="btn-secondary text-red-600 hover:text-red-700"><Trash2 size={18} /> Delete order</button>}<StatusBadge status={order.status} /></div>}
+        action={<div className="flex flex-wrap items-center gap-3">{canEditOrder && <Link to={isShipment ? `/shipments/${order.id}/edit` : `/orders/${order.id}/edit`} className="btn-secondary"><Edit3 size={18} /> {isShipment ? "Edit shipment" : "Edit order"}</Link>}{canDeleteRecord && <button type="button" onClick={requestDelete} className="btn-secondary text-red-600 hover:text-red-700"><Trash2 size={18} /> {isShipment ? "Delete shipment" : "Delete contract"}</button>}<StatusBadge status={order.status} /></div>}
       />
+      <DeleteConfirmationModal open={deleteOpen} title={isShipment ? "Delete shipment" : "Delete sales contract"} recordName={isShipment ? order.shipment_number : order.sales_contract_number || order.invoice_number} description={isShipment ? "This permanently removes the shipment, its containers, allocations and document history. Allocated quantities will become available on their Sales Contracts again." : "This permanently removes the contract and its product lines. Contracts with shipment allocations or recorded payments must be cleared first."} error={deleteError} deleting={deleting} onClose={() => setDeleteOpen(false)} onConfirm={deleteRecord} />
       {gatePassOnly ? (
         <section className="panel mx-auto max-w-3xl p-6 md:p-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
