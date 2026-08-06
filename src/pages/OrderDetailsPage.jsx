@@ -1419,6 +1419,9 @@ function packageDisplayCount(item) {
 }
 
 function money(value, currency = "USD") {
-  const amount = Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const amount = Number(value || 0).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
   return `${currency === "USD" ? "$" : `${currency} `}${amount}`;
 }
