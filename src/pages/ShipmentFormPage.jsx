@@ -11,7 +11,9 @@ const initialForm = {
   port_of_loading: "Karachi, Pakistan", port_of_destination: "", final_destination: "",
   shipping_type: "CAF", shipped_per: "By Sea", vessel_name: "", voyage_number: "",
   bl_number: "", bl_date: "",
-  freight_term: "Freight Prepaid", notes: ""
+  freight_term: "Freight Prepaid",
+  invoice_adjustment_type: "claim", invoice_adjustment_operation: "less",
+  invoice_adjustment_amount: "", invoice_adjustment_description: "", notes: ""
 };
 const emptyContainer = { container_number: "", container_type: "40 HC", cbm: 0 };
 
@@ -93,6 +95,10 @@ export function ShipmentFormPage() {
           bl_number: shipment.bl_number || "",
           bl_date: shipment.bl_date ? String(shipment.bl_date).slice(0, 10) : "",
           freight_term: shipment.freight_term || "",
+          invoice_adjustment_type: shipment.invoice_adjustment_type || "claim",
+          invoice_adjustment_operation: shipment.invoice_adjustment_operation || "less",
+          invoice_adjustment_amount: Number(shipment.invoice_adjustment_amount || 0) || "",
+          invoice_adjustment_description: shipment.invoice_adjustment_description || "",
           notes: shipment.notes || ""
         });
         setLines(availableData.lines);
@@ -259,6 +265,22 @@ export function ShipmentFormPage() {
           </div>
         </section>
 
+        <section className="panel mt-6 p-5 md:p-7">
+          <div className="mb-5">
+            <h2 className="font-bold">Client invoice adjustment</h2>
+            <p className="mt-1 text-xs text-slate-500">Optionally add or deduct a claim, freight charge, or expense from the Client Commercial Invoice. Customs invoice values are not affected.</p>
+          </div>
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <label><span className="label">Adjustment type</span><select className="field" value={form.invoice_adjustment_type} onChange={(event) => setForm({ ...form, invoice_adjustment_type: event.target.value })}><option value="claim">Claim</option><option value="freight">Freight</option><option value="expense">Expense</option><option value="other">Other</option></select></label>
+            <label><span className="label">Calculation</span><select className="field" value={form.invoice_adjustment_operation} onChange={(event) => setForm({ ...form, invoice_adjustment_operation: event.target.value })}><option value="less">Less (−)</option><option value="add">Add (+)</option></select></label>
+            <TextField label={`Amount (${form.currency})`} type="number" step="0.01" value={form.invoice_adjustment_amount} onChange={(value) => setForm({ ...form, invoice_adjustment_amount: value })} />
+            <TextField label="Description / remarks" value={form.invoice_adjustment_description} onChange={(value) => setForm({ ...form, invoice_adjustment_description: value })} />
+          </div>
+          <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+            Client invoice value after adjustment, before advance: <strong className="text-forest-800">{form.currency} {(totals.value + (form.invoice_adjustment_operation === "add" ? 1 : -1) * Number(form.invoice_adjustment_amount || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+          </div>
+        </section>
+
         <section className="panel mt-6 overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4 md:px-7">
             <div><h2 className="font-bold">Select sales contracts</h2><p className="mt-1 text-xs text-slate-500">Only open contracts belonging to the selected client are available.</p></div>
@@ -332,6 +354,6 @@ export function ShipmentFormPage() {
 }
 
 function quantityKey(lineId, containerIndex) { return `${lineId}:${containerIndex}`; }
-function TextField({ label, value, onChange, type = "text", required }) { return <label><span className="label">{label}</span><input className="field" required={required} min={type === "number" ? "0" : undefined} step={type === "number" ? "0.001" : undefined} type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
+function TextField({ label, value, onChange, type = "text", step, required }) { return <label><span className="label">{label}</span><input className="field" required={required} min={type === "number" ? "0" : undefined} step={type === "number" ? step || "0.001" : undefined} type={type} value={value} onChange={(event) => onChange(event.target.value)} /></label>; }
 function SelectField({ label, value, onChange, options, required, disabled = false }) { return <label><span className="label">{label}</span><select className="field disabled:cursor-not-allowed disabled:bg-slate-100" required={required} disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)}><option value="">Select...</option>{options.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>; }
 function Summary({ label, value }) { return <div><div className="text-xs font-bold uppercase tracking-wide text-forest-600">{label}</div><div className="mt-1 text-lg font-bold text-forest-900">{value}</div></div>; }

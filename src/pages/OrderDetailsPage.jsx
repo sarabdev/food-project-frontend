@@ -629,7 +629,9 @@ function CommercialInvoiceDocument({ order, documentType }) {
   const sampleItems = order.items.filter((item) => item.is_sample);
   const invoiceTotal = commercialItems.reduce((sum, item) => sum + invoiceLineValue(item, isCustoms), 0);
   const advanceAmount = isCustoms ? 0 : invoiceTotal * (Number(order.advance_percentage || 0) / 100);
-  const balanceAmount = invoiceTotal - advanceAmount;
+  const adjustmentAmount = isCustoms ? 0 : Number(order.invoice_adjustment_amount || 0);
+  const adjustmentSign = order.invoice_adjustment_operation === "add" ? 1 : -1;
+  const balanceAmount = invoiceTotal - advanceAmount + adjustmentSign * adjustmentAmount;
   const netWeight = order.items.reduce((sum, item) => sum + Number(item.total_net_weight || 0), 0);
   const grossWeight = order.items.reduce((sum, item) => sum + Number(item.total_gross_weight || 0), 0);
   const commercialCartons = commercialItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
@@ -676,6 +678,10 @@ function CommercialInvoiceDocument({ order, documentType }) {
         commercialCartons={commercialCartons}
         invoiceTotal={invoiceTotal}
         advanceAmount={advanceAmount}
+        adjustmentAmount={adjustmentAmount}
+        adjustmentType={order.invoice_adjustment_type}
+        adjustmentOperation={order.invoice_adjustment_operation}
+        adjustmentDescription={order.invoice_adjustment_description}
         balanceAmount={balanceAmount}
         currency={order.currency || "USD"}
         isCustoms={isCustoms}
@@ -707,7 +713,7 @@ function CommercialInvoiceDocument({ order, documentType }) {
   );
 }
 
-function InvoiceItemsTable({ commercialItems, sampleItems, commercialCartons, invoiceTotal, advanceAmount, balanceAmount, currency, isCustoms }) {
+function InvoiceItemsTable({ commercialItems, sampleItems, commercialCartons, invoiceTotal, advanceAmount, adjustmentAmount, adjustmentType, adjustmentOperation, adjustmentDescription, balanceAmount, currency, isCustoms }) {
   return (
     <table className={`invoice-table ${isCustoms ? "invoice-table-customs" : "invoice-table-client"}`}>
       <colgroup>
@@ -749,7 +755,7 @@ function InvoiceItemsTable({ commercialItems, sampleItems, commercialCartons, in
         ))}
         <tr className="invoice-total-row">
           <td colSpan={isCustoms ? 5 : 4}>
-            <InvoiceTotals currency={currency} invoiceTotal={invoiceTotal} advanceAmount={advanceAmount} balanceAmount={balanceAmount} isCustoms={isCustoms} />
+            <InvoiceTotals currency={currency} invoiceTotal={invoiceTotal} advanceAmount={advanceAmount} adjustmentAmount={adjustmentAmount} adjustmentType={adjustmentType} adjustmentOperation={adjustmentOperation} adjustmentDescription={adjustmentDescription} balanceAmount={balanceAmount} isCustoms={isCustoms} />
           </td>
         </tr>
       </tbody>
@@ -775,15 +781,21 @@ function InvoiceLine({ item, currency, isCustoms }) {
   );
 }
 
-function InvoiceTotals({ currency, invoiceTotal, advanceAmount, balanceAmount, isCustoms }) {
+function InvoiceTotals({ currency, invoiceTotal, advanceAmount, adjustmentAmount, adjustmentType, adjustmentOperation, adjustmentDescription, balanceAmount, isCustoms }) {
   if (isCustoms) return <>TOTAL INVOICE VALUE&nbsp;&nbsp;{currency}: {decimalMoney(invoiceTotal)}</>;
   return (
     <div className="invoice-totals-box">
       <span>TOTAL INVOICE VALUE</span><strong>{currency}: {decimalMoney(invoiceTotal)}</strong>
       <span>LESS ADVANCE PAYMENT</span><strong>{currency}: {decimalMoney(advanceAmount)}</strong>
+      {adjustmentAmount > 0 && <><span>{adjustmentOperation === "add" ? "ADD" : "LESS"} {invoiceAdjustmentLabel(adjustmentType, adjustmentDescription)}</span><strong>{currency}: {decimalMoney(adjustmentAmount)}</strong></>}
       <span>BALANCE INVOICE VALUE {currency}:</span><strong>{decimalMoney(balanceAmount)}</strong>
     </div>
   );
+}
+
+function invoiceAdjustmentLabel(type, description) {
+  const label = type ? type.replaceAll("_", " ").toUpperCase() : "ADJUSTMENT";
+  return description ? `${label} - ${description}` : label;
 }
 
 function PackingWeightListDocument({ order, documentType }) {
