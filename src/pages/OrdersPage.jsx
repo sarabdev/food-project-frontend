@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Edit3, FileStack, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
+import { ListToolbar, ToolbarSelect } from "../components/ListToolbar";
 import { api, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -23,6 +24,8 @@ export function OrdersPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const { can } = useAuth();
   const canEdit = can("orders.edit");
   const canDelete = can("orders.delete");
@@ -30,6 +33,14 @@ export function OrdersPage() {
   const gatePassOnly = can("gate_pass.view") && !can("documents.preview") && !can("orders.edit");
   const load = () => api.get("/orders").then(({ data }) => setOrders(data.orders));
   useEffect(() => { load(); }, []);
+  const filteredOrders = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return orders.filter((order) => {
+      const matchesSearch = !needle || [order.sales_contract_number, order.invoice_number, order.client_name, order.currency]
+        .some((value) => String(value || "").toLowerCase().includes(needle));
+      return matchesSearch && (!statusFilter || order.status === statusFilter);
+    });
+  }, [orders, search, statusFilter]);
 
   function requestDelete(order) {
     setDeleteTarget(order);
@@ -65,15 +76,18 @@ export function OrdersPage() {
   return (
     <>
       <PageHeader eyebrow="Sales" title="Sales contracts" description={gatePassOnly ? "Open a shipment from the Shipments page to complete its gate pass." : "Record what the client ordered here, then allocate exact quantities when creating a shipment."} action={can("orders.create") && <Link to="/orders/new" className="btn-primary"><Plus size={18} /> New sales contract</Link>} />
+      <ListToolbar search={search} onSearchChange={setSearch} placeholder="Search contract, invoice or client..." count={filteredOrders.length} total={orders.length} hasFilters={Boolean(search || statusFilter)} onClear={() => { setSearch(""); setStatusFilter(""); }}>
+        <ToolbarSelect label="Filter by status" value={statusFilter} onChange={setStatusFilter} options={[["", "All statuses"], ...statuses]} />
+      </ListToolbar>
       <div className="panel overflow-hidden"><div className="overflow-x-auto"><table className={`w-full ${gatePassOnly ? "min-w-[760px]" : "min-w-[950px]"} text-left text-sm`}>
         <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Contract</th><th className="px-5 py-3">Actual client</th><th className="px-5 py-3">Fulfilled</th><th className="px-5 py-3">Contract weight (N/G)</th>{!gatePassOnly && <th className="px-5 py-3">Contract value</th>}<th className="px-5 py-3">Status</th><th /></tr></thead>
-        <tbody className="divide-y">{orders.map((order) => {
+        <tbody className="divide-y">{filteredOrders.map((order) => {
           const canEditOrder = canEdit && !["shipped", "completed", "cancelled"].includes(order.status);
           const canDeleteOrder = canDelete && !["shipped", "completed"].includes(order.status);
           return <tr key={order.id} className="hover:bg-slate-50"><td className="px-5 py-4"><div className="font-bold">{order.sales_contract_number || order.invoice_number}</div><div className="text-xs text-slate-400">{new Date(order.contract_date).toLocaleDateString()}</div></td><td className="px-5 py-4">{order.client_name}</td><td className="px-5 py-4"><div className="font-semibold">{Number(order.shipped_quantity).toLocaleString()} / {Number(order.contracted_quantity).toLocaleString()}</div><div className="text-xs text-slate-400">{Number(order.contracted_quantity) ? Math.min(100, Number(order.shipped_quantity) / Number(order.contracted_quantity) * 100).toFixed(0) : 0}% allocated</div></td><td className="px-5 py-4">{Number(order.total_net_weight).toLocaleString()} / {Number(order.total_gross_weight).toLocaleString()} kg</td>{!gatePassOnly && <td className="px-5 py-4 font-semibold">{order.currency} {Number(order.client_value).toLocaleString()}</td>}<td className="px-5 py-4">{canChangeStatus ? <select className="field min-w-40 py-1.5 text-xs font-semibold capitalize" value={order.status} disabled={savingStatusId === order.id} onChange={(event) => updateStatus(order, event.target.value)}>{statuses.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select> : <StatusBadge status={order.status} />}</td><td className="px-5 py-4 text-right"><div className="flex justify-end gap-4">{canEditOrder && <Link className="inline-flex items-center gap-2 font-semibold text-slate-600 hover:text-forest-700" to={`/orders/${order.id}/edit`}><Edit3 size={16} /> Edit</Link>}{canDeleteOrder && <button type="button" onClick={() => requestDelete(order)} className="inline-flex items-center gap-2 font-semibold text-red-600 hover:text-red-700"><Trash2 size={16} /> Delete</button>}<Link className="inline-flex items-center gap-2 font-semibold text-forest-700" to={`/orders/${order.id}`}>Open <ArrowRight size={16} /></Link></div></td></tr>;
         })}</tbody>
-      </table></div>{!orders.length && <div className="py-16 text-center text-slate-400"><FileStack className="mx-auto mb-3" />No export orders yet.</div>}</div>
-      <DeleteConfirmationModal open={Boolean(deleteTarget)} title="Delete sales contract" recordName={deleteTarget?.sales_contract_number || deleteTarget?.invoice_number || "this sales contract"} description="This permanently removes the contract and its product lines. Contracts with shipment allocations or recorded payments must be cleared first." error={deleteError} deleting={deleting} onClose={() => setDeleteTarget(null)} onConfirm={confirmDelete} />
+      </table></div>{!filteredOrders.length && <div className="py-16 text-center text-slate-400"><FileStack className="mx-auto mb-3" />{orders.length ? "No sales contracts match your filters." : "No export orders yet."}</div>}</div>
+      <DeleteConfirmationModal open={Boolean(deleteTarget)} title="Delete sales contract" recordName={deleteTarget?.sales_contract_number || deleteTarget?.invoice_number || "this sales contract"} description="The contract will disappear from active screens, reports, and ledgers. A contract allocated to an active shipment must have that shipment deleted first." affected={["Sales contract and all product lines", "Payment and ledger entries linked to this contract", "Document preview/download history"]} retained={["Client and other parties", "Products", "Bank accounts", "Users"]} error={deleteError} deleting={deleting} onClose={() => setDeleteTarget(null)} onConfirm={confirmDelete} />
     </>
   );
 }

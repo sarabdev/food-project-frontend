@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Edit3, PackageCheck, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
+import { ListToolbar, ToolbarSelect } from "../components/ListToolbar";
 import { api, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -18,10 +19,20 @@ export function ShipmentsPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const { can } = useAuth();
   const gatePassOnly = can("gate_pass.view") && !can("documents.preview") && !can("orders.edit");
   const load = () => api.get("/shipments").then(({ data }) => setShipments(data.shipments));
   useEffect(() => { load(); }, []);
+  const filteredShipments = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return shipments.filter((shipment) => {
+      const matchesSearch = !needle || [shipment.shipment_number, shipment.client_name, shipment.sales_contract_number, shipment.container_number, shipment.currency]
+        .some((value) => String(value || "").toLowerCase().includes(needle));
+      return matchesSearch && (!statusFilter || shipment.status === statusFilter);
+    });
+  }, [shipments, search, statusFilter]);
 
   async function updateStatus(shipment, status) {
     if (status === shipment.status) return;
@@ -62,11 +73,14 @@ export function ShipmentsPage() {
         description="Combine remaining quantities from one or more sales contracts into the documents for an actual dispatch."
         action={can("orders.create") && <Link to="/shipments/new" className="btn-primary"><Plus size={18} /> New shipment</Link>}
       />
+      <ListToolbar search={search} onSearchChange={setSearch} placeholder="Search shipment, client, contract or container..." count={filteredShipments.length} total={shipments.length} hasFilters={Boolean(search || statusFilter)} onClear={() => { setSearch(""); setStatusFilter(""); }}>
+        <ToolbarSelect label="Filter by status" value={statusFilter} onChange={setStatusFilter} options={[["", "All statuses"], ...statuses]} />
+      </ListToolbar>
       <div className="panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[950px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Shipment</th><th className="px-5 py-3">Client</th><th className="px-5 py-3">Contracts</th><th className="px-5 py-3">Containers</th><th className="px-5 py-3">Packages</th><th className="px-5 py-3">Weight (N/G)</th>{!gatePassOnly && <th className="px-5 py-3">Value</th>}<th className="px-5 py-3">Status</th><th /></tr></thead>
-            <tbody className="divide-y">{shipments.map((shipment) => (
+            <tbody className="divide-y">{filteredShipments.map((shipment) => (
               <tr key={shipment.id} className="hover:bg-slate-50">
                 <td className="px-5 py-4"><div className="font-bold">{shipment.shipment_number}</div><div className="text-xs text-slate-400">{new Date(shipment.shipment_date).toLocaleDateString()}</div></td>
                 <td className="px-5 py-4">{shipment.client_name}</td>
@@ -81,9 +95,9 @@ export function ShipmentsPage() {
             ))}</tbody>
           </table>
         </div>
-        {!shipments.length && <div className="py-16 text-center text-slate-400"><PackageCheck className="mx-auto mb-3" />No shipments created yet.</div>}
+        {!filteredShipments.length && <div className="py-16 text-center text-slate-400"><PackageCheck className="mx-auto mb-3" />{shipments.length ? "No shipments match your filters." : "No shipments created yet."}</div>}
       </div>
-      <DeleteConfirmationModal open={Boolean(deleteTarget)} title="Delete shipment" recordName={deleteTarget?.shipment_number || "this shipment"} description="This permanently removes the shipment, its containers, allocations and document history. The allocated quantities will become available on their Sales Contracts again." error={deleteError} deleting={deleting} onClose={() => setDeleteTarget(null)} onConfirm={confirmDelete} />
+      <DeleteConfirmationModal open={Boolean(deleteTarget)} title="Delete shipment" recordName={deleteTarget?.shipment_number || "this shipment"} description="The shipment will disappear from active screens and its allocated quantities will become available on their sales contracts again." affected={["Shipment details and gate-pass information", "Containers and contract allocations", "Shipment document preview/download history"]} retained={["Sales contracts", "Client and other parties", "Products", "Users"]} error={deleteError} deleting={deleting} onClose={() => setDeleteTarget(null)} onConfirm={confirmDelete} />
     </>
   );
 }

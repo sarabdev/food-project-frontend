@@ -42,69 +42,6 @@
   }
 }
 
-@media print {
-  body.printing-document > #root {
-    display: none !important;
-  }
-
-  body.printing-document > .document-print-root {
-    display: block !important;
-  }
-
-  .no-print {
-    display: none !important;
-  }
-
-  @page {
-    size: A4;
-    margin: 4mm;
-  }
-
-  body * {
-    visibility: hidden;
-  }
-
-  .print-document,
-  .print-document *,
-  .report-print,
-  .report-print * {
-    visibility: visible;
-  }
-
-  .print-document {
-    left: 0 !important;
-    margin: 0 !important;
-    position: absolute !important;
-    top: 0 !important;
-    zoom: var(--document-print-scale, 0.96);
-  }
-
-  .report-print {
-    background: white;
-    left: 0 !important;
-    padding: 10mm !important;
-    position: absolute !important;
-    top: 0 !important;
-    width: 100% !important;
-  }
-
-  .report-print .overflow-x-auto {
-    overflow: visible !important;
-  }
-
-  .report-print table {
-    min-width: 0 !important;
-  }
-
-  body {
-    background: white;
-  }
-}
-
-.document-print-root {
-  display: none;
-}
-
 .sale-contract-sheet {
   aspect-ratio: 210 / 297;
   box-sizing: border-box;
@@ -701,7 +638,7 @@
 }
 
 .invoice-applicant,
-.invoice-gd,
+.invoice-customs-references,
 .invoice-title-block {
   font-size: 8px;
   line-height: 1.2;
@@ -717,8 +654,19 @@
   text-transform: none;
 }
 
-.invoice-gd {
+.invoice-customs-references {
+  display: grid;
+  gap: 2mm;
   text-align: center;
+}
+
+.invoice-customs-references > div {
+  display: grid;
+  gap: 1px;
+}
+
+.invoice-customs-references span {
+  overflow-wrap: anywhere;
 }
 
 .invoice-title-block h1 {
@@ -1547,19 +1495,4 @@
 
 .origin-value {
   padding-top: 1mm;
-}
-
-@media print {
-  .sale-contract-sheet,
-  .packing-sheet,
-  .commercial-invoice-sheet,
-  .gate-pass-sheet,
-  .bl-sheet,
-  .origin-sheet {
-    box-shadow: none !important;
-    min-height: 297mm;
-    width: 210mm;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
 }

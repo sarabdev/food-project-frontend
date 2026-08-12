@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Boxes, Pencil, Plus } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Modal } from "../components/Modal";
+import { ListToolbar, ToolbarSelect } from "../components/ListToolbar";
 import { api, assetUrl, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -20,10 +21,20 @@ export function ProductsPage() {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [packageFilter, setPackageFilter] = useState("");
   const { can } = useAuth();
 
   const load = () => api.get("/products").then(({ data }) => setProducts(data.products));
   useEffect(() => { load(); }, []);
+  const filteredProducts = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return products.filter((product) => {
+      const matchesSearch = !needle || [product.name, product.sku, product.hs_code, product.description]
+        .some((value) => String(value || "").toLowerCase().includes(needle));
+      return matchesSearch && (!packageFilter || product.package_type === packageFilter);
+    });
+  }, [products, search, packageFilter]);
 
   useEffect(() => {
     if (!imageFile) {
@@ -75,12 +86,15 @@ export function ProductsPage() {
   return (
     <>
       <PageHeader eyebrow="Master data" title="Products & packing" description="Weights and packing rules entered here drive every packing list and invoice calculation." action={can("products.create") && <button className="btn-primary" onClick={() => show(null)}><Plus size={18} /> Add product</button>} />
+      <ListToolbar search={search} onSearchChange={setSearch} placeholder="Search product, SKU or HS code..." count={filteredProducts.length} total={products.length} hasFilters={Boolean(search || packageFilter)} onClear={() => { setSearch(""); setPackageFilter(""); }}>
+        <ToolbarSelect label="Filter by package type" value={packageFilter} onChange={setPackageFilter} options={[["", "All package types"], ...packageTypes.map((type) => [type, type])]} />
+      </ListToolbar>
       <div className="panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">Product</th><th className="px-5 py-3">HS Code</th><th className="px-5 py-3">Packing</th><th className="px-5 py-3">Net / Gross</th><th className="px-5 py-3">Client price</th><th className="px-5 py-3">Customs / kg</th><th /></tr></thead>
             <tbody className="divide-y">
-              {products.map((product) => (
+              {filteredProducts.map((product) => (
                 <tr key={product.id}>
                   <td className="px-5 py-4"><div className="font-semibold">{product.name}</div><div className="text-xs text-slate-400">{product.sku || "No SKU"}</div></td>
                   <td className="px-5 py-4">{product.hs_code || "—"}</td>
@@ -91,7 +105,7 @@ export function ProductsPage() {
                   <td className="px-5 py-4 text-right">{can("products.edit") && <button onClick={() => show(product)} className="rounded-lg p-2 hover:bg-slate-100"><Pencil size={17} /></button>}</td>
                 </tr>
               ))}
-              {!products.length && <tr><td colSpan="7" className="py-16 text-center"><Boxes className="mx-auto mb-3 text-slate-300" /><div className="text-slate-400">No products have been added.</div></td></tr>}
+              {!filteredProducts.length && <tr><td colSpan="7" className="py-16 text-center"><Boxes className="mx-auto mb-3 text-slate-300" /><div className="text-slate-400">{products.length ? "No products match your filters." : "No products have been added."}</div></td></tr>}
             </tbody>
           </table>
         </div>

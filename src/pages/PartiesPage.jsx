@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Building2, Pencil, Plus } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Modal } from "../components/Modal";
+import { ListToolbar, ToolbarSelect } from "../components/ListToolbar";
 import { api, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -16,14 +17,23 @@ const empty = { party_type: "client", name: "", contact_person: "", business_id:
 export function PartiesPage() {
   const [parties, setParties] = useState([]);
   const [filter, setFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(empty);
   const [error, setError] = useState("");
   const { can } = useAuth();
 
-  const load = () => api.get("/parties", { params: filter ? { type: filter } : {} }).then(({ data }) => setParties(data.parties));
-  useEffect(() => { load(); }, [filter]);
+  const load = () => api.get("/parties").then(({ data }) => setParties(data.parties));
+  useEffect(() => { load(); }, []);
+  const filteredParties = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return parties.filter((party) => {
+      const matchesSearch = !needle || [party.name, party.contact_person, party.business_id, party.phone, party.email, party.city, party.country]
+        .some((value) => String(value || "").toLowerCase().includes(needle));
+      return matchesSearch && (!filter || party.party_type === filter);
+    });
+  }, [parties, search, filter]);
 
   function open(party = null) {
     setEditing(party);
@@ -45,12 +55,11 @@ export function PartiesPage() {
   return (
     <>
       <PageHeader eyebrow="Master data" title="Business parties" description="Manage real clients, customs consignees and clearing agents." action={can("parties.create") && <button className="btn-primary" onClick={() => open()}><Plus size={18} /> Add party</button>} />
-      <div className="mb-5 flex flex-wrap gap-2">
-        <button onClick={() => setFilter("")} className={filter === "" ? "btn-primary" : "btn-secondary"}>All</button>
-        {Object.entries(types).map(([value, label]) => <button key={value} onClick={() => setFilter(value)} className={filter === value ? "btn-primary" : "btn-secondary"}>{label}</button>)}
-      </div>
+      <ListToolbar search={search} onSearchChange={setSearch} placeholder="Search name, contact, phone or location..." count={filteredParties.length} total={parties.length} hasFilters={Boolean(search || filter)} onClear={() => { setSearch(""); setFilter(""); }}>
+        <ToolbarSelect label="Filter by party type" value={filter} onChange={setFilter} options={[["", "All party types"], ...Object.entries(types)]} />
+      </ListToolbar>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {parties.map((party) => (
+        {filteredParties.map((party) => (
           <article key={party.id} className="panel p-5">
             <div className="flex items-start gap-4">
               <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-forest-50 text-forest-700"><Building2 size={20} /></div>
@@ -61,7 +70,7 @@ export function PartiesPage() {
           </article>
         ))}
       </div>
-      {!parties.length && <div className="panel py-16 text-center text-slate-400">No matching business parties.</div>}
+      {!filteredParties.length && <div className="panel py-16 text-center text-slate-400">{parties.length ? "No business parties match your filters." : "No business parties have been added."}</div>}
       <Modal open={modalOpen} title={editing ? "Edit business party" : "Add business party"} onClose={() => setModalOpen(false)} wide>
         <form onSubmit={save}>
           <div className="grid gap-5 md:grid-cols-2">

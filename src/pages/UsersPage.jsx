@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, UserRound } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Modal } from "../components/Modal";
+import { ListToolbar, ToolbarSelect } from "../components/ListToolbar";
 import { api, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -16,6 +17,9 @@ export function UsersPage() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyUser);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const fieldRefs = useRef({});
   const { can } = useAuth();
 
@@ -24,6 +28,16 @@ export function UsersPage() {
     setRoles(rolesResponse.data.roles);
   });
   useEffect(() => { load(); }, []);
+  const filteredUsers = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return users.filter((user) => {
+      const matchesSearch = !needle || [user.name, user.email, user.phone, user.role_name]
+        .some((value) => String(value || "").toLowerCase().includes(needle));
+      const matchesRole = !roleFilter || String(user.role_id) === roleFilter || user.role_name === roleFilter;
+      const matchesStatus = !statusFilter || (statusFilter === "active" ? Boolean(user.is_active) : !user.is_active);
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [users, search, roleFilter, statusFilter]);
 
   function openForm() {
     setForm(emptyUser);
@@ -89,11 +103,16 @@ export function UsersPage() {
   return (
     <>
       <PageHeader eyebrow="Access management" title="System users" description="Create accounts and assign a role. Access changes are managed from Roles & Access." action={can("users.create") && <button className="btn-primary" onClick={openForm}><Plus size={18} /> Add user</button>} />
+      <ListToolbar search={search} onSearchChange={setSearch} placeholder="Search name, email, phone or role..." count={filteredUsers.length} total={users.length} hasFilters={Boolean(search || roleFilter || statusFilter)} onClear={() => { setSearch(""); setRoleFilter(""); setStatusFilter(""); }}>
+        <ToolbarSelect label="Filter by role" value={roleFilter} onChange={setRoleFilter} options={[["", "All roles"], ...roles.map((role) => [String(role.id), role.name])]} />
+        <ToolbarSelect label="Filter by status" value={statusFilter} onChange={setStatusFilter} options={[["", "All statuses"], ["active", "Active"], ["disabled", "Disabled"]]} />
+      </ListToolbar>
       <div className="panel overflow-hidden">
         <div className="overflow-x-auto"><table className="w-full min-w-[700px] text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500"><tr><th className="px-5 py-3">User</th><th className="px-5 py-3">Role</th><th className="px-5 py-3">Phone</th><th className="px-5 py-3">Last login</th><th className="px-5 py-3">Status</th></tr></thead>
-          <tbody className="divide-y">{users.map((user) => <tr key={user.id}><td className="px-5 py-4"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-full bg-forest-50 text-forest-700"><UserRound size={17} /></div><div><div className="font-semibold">{user.name}</div><div className="text-xs text-slate-400">{user.email}</div></div></div></td><td className="px-5 py-4">{user.role_name}</td><td className="px-5 py-4 text-slate-500">{user.phone || "—"}</td><td className="px-5 py-4 text-slate-500">{user.last_login_at ? new Date(user.last_login_at).toLocaleString() : "Never"}</td><td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${user.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{user.is_active ? "Active" : "Disabled"}</span></td></tr>)}</tbody>
+          <tbody className="divide-y">{filteredUsers.map((user) => <tr key={user.id}><td className="px-5 py-4"><div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center rounded-full bg-forest-50 text-forest-700"><UserRound size={17} /></div><div><div className="font-semibold">{user.name}</div><div className="text-xs text-slate-400">{user.email}</div></div></div></td><td className="px-5 py-4">{user.role_name}</td><td className="px-5 py-4 text-slate-500">{user.phone || "—"}</td><td className="px-5 py-4 text-slate-500">{user.last_login_at ? new Date(user.last_login_at).toLocaleString() : "Never"}</td><td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${user.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{user.is_active ? "Active" : "Disabled"}</span></td></tr>)}</tbody>
         </table></div>
+        {!filteredUsers.length && <div className="py-16 text-center text-slate-400">{users.length ? "No users match your filters." : "No users have been added."}</div>}
       </div>
       <Modal open={open} title="Add system user" onClose={closeForm}>
         <form onSubmit={save} noValidate className="space-y-5">

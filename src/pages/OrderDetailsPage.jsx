@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Edit3, FileText, Printer, Save, Trash2, Truck } from "lucide-react";
+import { Download, Edit3, FileText, Save, Trash2, Truck } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { Modal } from "../components/Modal";
 import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
 import { api, assetUrl, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
+import { downloadElementPdf } from "../lib/pdf";
 
 const documents = [
   ["sale_contract", "Sale Contract", "Actual client, pricing and payment terms"],
@@ -59,6 +60,7 @@ export function OrderDetailsPage({ entityType = "orders" }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const { can } = useAuth();
   const isShipment = entityType === "shipments";
   const endpoint = `/${entityType}/${id}`;
@@ -88,8 +90,8 @@ export function OrderDetailsPage({ entityType = "orders" }) {
   const canDeleteRecord = can("orders.delete") && !["shipped", "completed"].includes(order.status);
   const canEditGatePass = canEditGatePassPermission && !["shipped", "completed", "cancelled"].includes(order.status);
   const canViewGatePass = can("documents.preview") || can("gate_pass.view");
-  const canPrintGatePass = can("documents.print") || can("gate_pass.print");
-  const canPrintDocument = preview?.[0] === "gate_pass" ? canPrintGatePass : can("documents.print");
+  const canExportGatePass = can("documents.print") || can("gate_pass.print");
+  const canExportDocument = preview?.[0] === "gate_pass" ? canExportGatePass : can("documents.print");
   const clearingAgents = parties;
   const gatePassDocument = documents.find((document) => document[0] === "gate_pass");
   const hasGatePassInfo = Boolean(order.truck_number || order.driver_name || order.driver_phone || order.transporter_name || order.transporter_contact || order.transporter_phone || order.clearing_agent_id || sealList(order.seal_numbers).length);
@@ -124,36 +126,14 @@ export function OrderDetailsPage({ entityType = "orders" }) {
     }
   }
 
-  async function printDocument() {
-    await api.post(`${endpoint}/document-audit`, { document_type: preview[0], action_name: "printed" });
-
-    document.querySelectorAll(".document-print-root").forEach((element) => element.remove());
-
-    const printableDocument = document.querySelector(".print-document");
-    if (!printableDocument) return;
-
-    const millimetersToPixels = 96 / 25.4;
-    const printableWidth = 202 * millimetersToPixels;
-    const printableHeight = 289 * millimetersToPixels;
-    const documentWidth = Math.max(printableDocument.scrollWidth, printableDocument.offsetWidth);
-    const documentHeight = Math.max(printableDocument.scrollHeight, printableDocument.offsetHeight);
-    const printScale = Math.min(printableWidth / documentWidth, printableHeight / documentHeight, 1);
-
-    const printRoot = document.createElement("div");
-    printRoot.className = "document-print-root";
-    const clonedDocument = printableDocument.cloneNode(true);
-    clonedDocument.style.setProperty("--document-print-scale", String(printScale));
-    printRoot.appendChild(clonedDocument);
-    document.body.appendChild(printRoot);
-    document.body.classList.add("printing-document");
-
-    const cleanupPrintRoot = () => {
-      document.body.classList.remove("printing-document");
-      printRoot.remove();
-    };
-
-    window.addEventListener("afterprint", cleanupPrintRoot, { once: true });
-    window.print();
+  async function exportDocumentPdf() {
+    setExportingPdf(true);
+    try {
+      await downloadElementPdf(document.querySelector(".print-document"), `${order.invoice_number}-${preview[1]}`);
+      await api.post(`${endpoint}/document-audit`, { document_type: preview[0], action_name: "downloaded" });
+    } finally {
+      setExportingPdf(false);
+    }
   }
 
   function requestDelete() {
@@ -181,7 +161,7 @@ export function OrderDetailsPage({ entityType = "orders" }) {
         description={`${order.client_name} - ${new Date(order.contract_date).toLocaleDateString()}${isShipment && order.sales_contract_number ? ` - Contracts: ${order.sales_contract_number}` : ""}`}
         action={<div className="flex flex-wrap items-center gap-3">{canEditOrder && <Link to={isShipment ? `/shipments/${order.id}/edit` : `/orders/${order.id}/edit`} className="btn-secondary"><Edit3 size={18} /> {isShipment ? "Edit shipment" : "Edit order"}</Link>}{canDeleteRecord && <button type="button" onClick={requestDelete} className="btn-secondary text-red-600 hover:text-red-700"><Trash2 size={18} /> {isShipment ? "Delete shipment" : "Delete contract"}</button>}<StatusBadge status={order.status} /></div>}
       />
-      <DeleteConfirmationModal open={deleteOpen} title={isShipment ? "Delete shipment" : "Delete sales contract"} recordName={isShipment ? order.shipment_number : order.sales_contract_number || order.invoice_number} description={isShipment ? "This permanently removes the shipment, its containers, allocations and document history. Allocated quantities will become available on their Sales Contracts again." : "This permanently removes the contract and its product lines. Contracts with shipment allocations or recorded payments must be cleared first."} error={deleteError} deleting={deleting} onClose={() => setDeleteOpen(false)} onConfirm={deleteRecord} />
+      <DeleteConfirmationModal open={deleteOpen} title={isShipment ? "Delete shipment" : "Delete sales contract"} recordName={isShipment ? order.shipment_number : order.sales_contract_number || order.invoice_number} description={isShipment ? "The shipment will disappear from active screens and allocated quantities will become available on their sales contracts again." : "The contract will disappear from active screens, reports, and ledgers. A contract allocated to an active shipment must have that shipment deleted first."} affected={isShipment ? ["Shipment details and gate-pass information", "Containers and contract allocations", "Shipment document history"] : ["Sales contract and all product lines", "Payment and ledger entries linked to this contract", "Document history"]} retained={isShipment ? ["Sales contracts", "Client and other parties", "Products", "Users"] : ["Client and other parties", "Products", "Bank accounts", "Users"]} error={deleteError} deleting={deleting} onClose={() => setDeleteOpen(false)} onConfirm={deleteRecord} />
       {gatePassOnly ? (
         <section className="panel mx-auto max-w-3xl p-6 md:p-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -190,7 +170,7 @@ export function OrderDetailsPage({ entityType = "orders" }) {
               <div>
                 <h2 className="text-lg font-bold">Gate pass</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  {hasGatePassInfo ? "Vehicle, driver and seal information has been entered." : "Complete the vehicle, driver and seal information before printing."}
+                  {hasGatePassInfo ? "Vehicle, driver and seal information has been entered." : "Complete the vehicle, driver and seal information before exporting."}
                 </p>
               </div>
             </div>
@@ -202,7 +182,7 @@ export function OrderDetailsPage({ entityType = "orders" }) {
               )}
               {canViewGatePass && (
                 <button type="button" onClick={() => openPreview(gatePassDocument)} className="btn-primary">
-                  <FileText size={18} /> Preview / Print
+                  <FileText size={18} /> Preview / Export PDF
                 </button>
               )}
             </div>
@@ -303,7 +283,7 @@ export function OrderDetailsPage({ entityType = "orders" }) {
         ) : (
           <GenericDocumentPreview order={order} preview={preview} />
         )}
-        {canPrintDocument && <div className="no-print mt-5 flex justify-end"><button onClick={printDocument} className="btn-primary"><Printer size={18} /> Print document</button></div>}
+        {canExportDocument && <div data-pdf-exclude className="mt-5 flex justify-end"><button onClick={exportDocumentPdf} className="btn-primary" disabled={exportingPdf}><Download size={18} /> {exportingPdf ? "Exporting..." : "Export PDF"}</button></div>}
       </Modal>
       <Modal open={gatePassOpen} title="Gate pass info" onClose={() => setGatePassOpen(false)} wide>
         <form onSubmit={saveGatePass}>
@@ -663,7 +643,10 @@ function CommercialInvoiceDocument({ order, documentType }) {
           <span>{consignee.name || "-"}</span>
           <span>{formatAddress(consignee.address, consignee.city, consignee.country)}</span>
         </div>
-        <div className="invoice-gd"><strong>{shipmentCustomsReference(order).documentLabel}</strong> {shipmentCustomsReference(order).value || "-"}</div>
+        <div className="invoice-customs-references">
+          <div><strong>G.D NO.</strong><span>{order.gd_number || "-"}</span></div>
+          <div><strong>FI NO.</strong><span>{order.fi_number || "-"}</span></div>
+        </div>
         <div className="invoice-title-block">
           <h1>COMMERCIAL INVOICE</h1>
           <InfoRows rows={[

@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   BarChart3, CalendarRange, Download, FileBarChart2, Filter,
-  Landmark, Printer, ReceiptText, RefreshCw, TrendingUp, WalletCards
+  FileDown, Landmark, ReceiptText, RefreshCw, TrendingUp, WalletCards
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { api, messageFromError } from "../lib/api";
+import { downloadElementPdf } from "../lib/pdf";
 
 const today = new Date().toISOString().slice(0, 10);
 const yearStart = `${today.slice(0, 4)}-01-01`;
@@ -94,7 +95,7 @@ export function ReportsPage() {
         description="Financial and operational reports built directly from export orders and payment records."
       />
 
-      <div className="no-print mb-6 flex gap-2 overflow-x-auto pb-1">
+      <div data-pdf-exclude className="mb-6 flex gap-2 overflow-x-auto pb-1">
         {reportTabs.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -145,7 +146,7 @@ export function ReportsPage() {
 
 function FilterPanel({ filters, setFilters, options, statementOnly, onApply, onReset }) {
   return (
-    <form onSubmit={onApply} className="panel no-print p-5">
+    <form data-pdf-exclude onSubmit={onApply} className="panel p-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
         <div className="flex items-center gap-3 xl:mr-2">
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-forest-50 text-forest-700"><Filter size={18} /></div>
@@ -358,7 +359,7 @@ function StatementReport({ data }) {
   }));
   return (
     <>
-      <ReportHeading title={`Client statement · ${data.party.name}`} subtitle={[data.party.contact_person, data.party.phone, data.party.email, data.party.country].filter(Boolean).join(" · ") || "Complete account history"} exportRows={rows} printable />
+      <ReportHeading title={`Client statement · ${data.party.name}`} subtitle={[data.party.contact_person, data.party.phone, data.party.email, data.party.country].filter(Boolean).join(" · ") || "Complete account history"} exportRows={rows} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {data.summary.map((summary) => (
           <div key={summary.currency} className="panel p-5">
@@ -432,13 +433,24 @@ function PaymentsReport({ data }) {
   );
 }
 
-function ReportHeading({ title, subtitle, exportRows, printable = true }) {
+function ReportHeading({ title, subtitle, exportRows }) {
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  async function exportPdf() {
+    setExportingPdf(true);
+    try {
+      await downloadElementPdf(document.querySelector(".report-print"), title);
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   return (
     <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
       <div><h2 className="text-xl font-bold">{title}</h2><p className="mt-1 text-sm text-slate-500">{subtitle}</p></div>
-      <div className="no-print flex gap-2">
+      <div data-pdf-exclude className="flex gap-2">
         <button className="btn-secondary" onClick={() => downloadCsv(title, exportRows)} disabled={!exportRows.length}><Download size={16} /> Export CSV</button>
-        {printable && <button className="btn-secondary" onClick={() => window.print()}><Printer size={16} /> Print</button>}
+        <button className="btn-secondary" onClick={exportPdf} disabled={exportingPdf}><FileDown size={16} /> {exportingPdf ? "Exporting..." : "Export PDF"}</button>
       </div>
     </div>
   );

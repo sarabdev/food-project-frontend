@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CreditCard, Pencil, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Modal } from "../components/Modal";
 import { BankAccountFields, emptyBankAccount } from "../components/BankAccountFields";
+import { ListToolbar, ToolbarSelect } from "../components/ListToolbar";
 import { api, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
@@ -14,10 +15,21 @@ export function BankAccountsPage() {
   const [error, setError] = useState("");
   const [pageError, setPageError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [currencyFilter, setCurrencyFilter] = useState("");
   const { can } = useAuth();
 
   const load = () => api.get("/bank-accounts").then(({ data }) => setAccounts(data.bank_accounts));
   useEffect(() => { load(); }, []);
+  const currencies = useMemo(() => [...new Set(accounts.map((account) => account.currency).filter(Boolean))].sort(), [accounts]);
+  const filteredAccounts = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return accounts.filter((account) => {
+      const matchesSearch = !needle || [account.account_name, account.bank_name, account.branch_name, account.account_number, account.swift_code, account.iban]
+        .some((value) => String(value || "").toLowerCase().includes(needle));
+      return matchesSearch && (!currencyFilter || account.currency === currencyFilter);
+    });
+  }, [accounts, search, currencyFilter]);
 
   function open(account = null) {
     setEditing(account);
@@ -57,8 +69,11 @@ export function BankAccountsPage() {
     <>
       <PageHeader eyebrow="Master data" title="Bank accounts" description="Manage payment instructions that can be selected for each sales contract." action={can("bank_accounts.create") && <button className="btn-primary" onClick={() => open()}><Plus size={18} /> Add bank account</button>} />
       {pageError && <div role="alert" className="mb-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{pageError}</div>}
+      <ListToolbar search={search} onSearchChange={setSearch} placeholder="Search account, bank, SWIFT or IBAN..." count={filteredAccounts.length} total={accounts.length} hasFilters={Boolean(search || currencyFilter)} onClear={() => { setSearch(""); setCurrencyFilter(""); }}>
+        <ToolbarSelect label="Filter by currency" value={currencyFilter} onChange={setCurrencyFilter} options={[["", "All currencies"], ...currencies.map((currency) => [currency, currency])]} />
+      </ListToolbar>
       <div className="grid gap-4 lg:grid-cols-2">
-        {accounts.map((account) => (
+        {filteredAccounts.map((account) => (
           <article key={account.id} className="panel p-5">
             <div className="flex items-start gap-4">
               <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-forest-50 text-forest-700"><CreditCard size={20} /></div>
@@ -80,7 +95,7 @@ export function BankAccountsPage() {
           </article>
         ))}
       </div>
-      {!accounts.length && <div className="panel py-16 text-center text-slate-400">No bank accounts have been added.</div>}
+      {!filteredAccounts.length && <div className="panel py-16 text-center text-slate-400">{accounts.length ? "No bank accounts match your filters." : "No bank accounts have been added."}</div>}
       <Modal open={modalOpen} title={editing ? "Edit bank account" : "Add bank account"} onClose={() => !saving && setModalOpen(false)} wide>
         <form onSubmit={save}>
           <BankAccountFields form={form} onChange={setForm} autoFocus />
