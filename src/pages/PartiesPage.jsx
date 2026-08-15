@@ -11,7 +11,8 @@ const types = {
   client: "Client",
   customs_consignee: "Customs Consignee",
   notify_party: "Notify Party",
-  clearing_agent: "Clearing Agent"
+  clearing_agent: "Clearing Agent",
+  shipping_company: "Shipping Company"
 };
 const empty = { party_type: "client", name: "", contact_person: "", business_id: "", phone: "", email: "", address_line_1: "", address_line_2: "", city: "", state_region: "", country: "", postal_code: "" };
 
@@ -78,7 +79,7 @@ export function PartiesPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Master data" title="Business parties" description="Manage real clients, customs consignees and clearing agents." action={can("parties.create") && <button className="btn-primary" onClick={() => open()}><Plus size={18} /> Add party</button>} />
+      <PageHeader eyebrow="Master data" title="Business parties" description="Manage clients, consignees, notify parties, clearing agents and shipping companies." action={can("parties.create") && <button className="btn-primary" onClick={() => open()}><Plus size={18} /> Add party</button>} />
       <ListToolbar search={search} onSearchChange={setSearch} placeholder="Search name, contact, phone or location..." count={filteredParties.length} total={parties.length} hasFilters={Boolean(search || filter)} onClear={() => { setSearch(""); setFilter(""); }}>
         <ToolbarSelect label="Filter by party type" value={filter} onChange={setFilter} options={[["", "All party types"], ...Object.entries(types)]} />
       </ListToolbar>
