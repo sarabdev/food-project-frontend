@@ -656,10 +656,6 @@ function CommercialInvoiceDocument({ order, documentType }) {
           <span>{consignee.name || "-"}</span>
           <span>{formatAddress(consignee.address, consignee.city, consignee.country)}</span>
         </div>
-        <div className="invoice-customs-references">
-          <div><strong>G.D NO.</strong><span>{order.gd_number || "-"}</span></div>
-          <div><strong>FI NO.</strong><span>{order.fi_number || "-"}</span></div>
-        </div>
         <div className="invoice-title-block">
           <h1>COMMERCIAL INVOICE</h1>
           <InfoRows rows={[
