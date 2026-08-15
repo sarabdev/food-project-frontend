@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   BarChart3, CalendarRange, Download, FileBarChart2, Filter,
-  FileDown, Landmark, ReceiptText, RefreshCw, TrendingUp, WalletCards
+  FileDown, Landmark, Printer, ReceiptText, RefreshCw, TrendingUp, WalletCards
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { api, messageFromError } from "../lib/api";
-import { downloadElementPdf } from "../lib/pdf";
+import { downloadElementPdf, printElement } from "../lib/pdf";
 
 const today = new Date().toISOString().slice(0, 10);
 const yearStart = `${today.slice(0, 4)}-01-01`;
@@ -435,6 +435,7 @@ function PaymentsReport({ data }) {
 
 function ReportHeading({ title, subtitle, exportRows }) {
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [printing, setPrinting] = useState(false);
 
   async function exportPdf() {
     setExportingPdf(true);
@@ -445,12 +446,22 @@ function ReportHeading({ title, subtitle, exportRows }) {
     }
   }
 
+  async function printReport() {
+    setPrinting(true);
+    try {
+      await printElement(document.querySelector(".report-print"), title);
+    } finally {
+      setPrinting(false);
+    }
+  }
+
   return (
     <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
       <div><h2 className="text-xl font-bold">{title}</h2><p className="mt-1 text-sm text-slate-500">{subtitle}</p></div>
-      <div data-pdf-exclude className="flex gap-2">
-        <button className="btn-secondary" onClick={() => downloadCsv(title, exportRows)} disabled={!exportRows.length}><Download size={16} /> Export CSV</button>
-        <button className="btn-secondary" onClick={exportPdf} disabled={exportingPdf}><FileDown size={16} /> {exportingPdf ? "Exporting..." : "Export PDF"}</button>
+      <div data-pdf-exclude className="flex flex-wrap gap-2">
+        <button className="btn-secondary" onClick={() => downloadCsv(title, exportRows)} disabled={!exportRows.length}><Download size={16} /> Download CSV</button>
+        <button className="btn-secondary" onClick={exportPdf} disabled={exportingPdf}><FileDown size={16} /> {exportingPdf ? "Downloading..." : "Download PDF"}</button>
+        <button className="btn-secondary" onClick={printReport} disabled={printing}><Printer size={16} /> {printing ? "Preparing..." : "Print"}</button>
       </div>
     </div>
   );

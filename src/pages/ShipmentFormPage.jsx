@@ -7,7 +7,7 @@ import { api, messageFromError } from "../lib/api";
 const today = new Date().toISOString().slice(0, 10);
 const initialForm = {
   client_id: "", customs_consignee_id: "", also_notify_party_id: "", shipment_date: today, currency: "USD",
-  customs_reference_type: "gd", customs_reference_number: "",
+  gd_number: "", fi_number: "",
   port_of_loading: "Karachi, Pakistan", port_of_destination: "", final_destination: "",
   shipping_type: "CAF", shipped_per: "By Sea", vessel_name: "", voyage_number: "",
   bl_number: "", bl_date: "",
@@ -82,8 +82,8 @@ export function ShipmentFormPage() {
           customs_consignee_id: String(shipment.customs_consignee_id),
           also_notify_party_id: shipment.also_notify_party_id ? String(shipment.also_notify_party_id) : "",
           shipment_date: String(shipment.shipment_date || shipment.contract_date).slice(0, 10),
-          customs_reference_type: shipment.fi_number && !shipment.gd_number ? "fi" : "gd",
-          customs_reference_number: shipment.fi_number && !shipment.gd_number ? shipment.fi_number : shipment.gd_number || "",
+          gd_number: shipment.gd_number || "",
+          fi_number: shipment.fi_number || "",
           currency: shipment.currency || "USD",
           port_of_loading: shipment.port_of_loading || "",
           port_of_destination: shipment.port_of_destination || "",
@@ -217,11 +217,8 @@ export function ShipmentFormPage() {
       const payloadAllocations = allocations.map(({ export_order_item_id, container_index, quantity }) => ({
         export_order_item_id, container_index, quantity
       }));
-      const { customs_reference_type, customs_reference_number, ...shipmentFields } = form;
       const payload = {
-        ...shipmentFields,
-        gd_number: customs_reference_type === "gd" ? customs_reference_number : null,
-        fi_number: customs_reference_type === "fi" ? customs_reference_number : null,
+        ...form,
         containers,
         allocations: payloadAllocations
       };
@@ -252,8 +249,8 @@ export function ShipmentFormPage() {
             <SelectField label="Customs / B/L consignee" value={form.customs_consignee_id} onChange={(value) => setForm({ ...form, customs_consignee_id: value })} options={consignees} required />
             <SelectField label="Also notify party" value={form.also_notify_party_id} onChange={(value) => setForm({ ...form, also_notify_party_id: value })} options={notifyParties} />
             <TextField label="Document date" type="date" value={form.shipment_date} onChange={(value) => setForm({ ...form, shipment_date: value })} required />
-            <label><span className="label">Customs reference type</span><select className="field" value={form.customs_reference_type} onChange={(event) => setForm({ ...form, customs_reference_type: event.target.value, customs_reference_number: "" })}><option value="gd">G.D. No.</option><option value="fi">FI No.</option></select></label>
-            <TextField label={form.customs_reference_type === "gd" ? "G.D. No." : "FI No."} value={form.customs_reference_number} onChange={(value) => setForm({ ...form, customs_reference_number: value })} />
+            <TextField label="G.D. No." value={form.gd_number} onChange={(value) => setForm({ ...form, gd_number: value })} />
+            <TextField label="FI No." value={form.fi_number} onChange={(value) => setForm({ ...form, fi_number: value })} />
             <TextField label="Port of loading" value={form.port_of_loading} onChange={(value) => setForm({ ...form, port_of_loading: value })} />
             <TextField label="Port of destination" value={form.port_of_destination} onChange={(value) => setForm({ ...form, port_of_destination: value })} />
             <TextField label="Final destination" value={form.final_destination} onChange={(value) => setForm({ ...form, final_destination: value })} />

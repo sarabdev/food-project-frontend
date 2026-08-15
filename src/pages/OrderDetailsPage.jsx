@@ -1,13 +1,13 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Download, Edit3, FileText, Save, Trash2, Truck } from "lucide-react";
+import { Download, Edit3, FileText, Printer, Save, Trash2, Truck } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { Modal } from "../components/Modal";
 import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
 import { api, assetUrl, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
-import { downloadElementPdf } from "../lib/pdf";
+import { downloadElementPdf, printElement } from "../lib/pdf";
 
 const documents = [
   ["sale_contract", "Sale Contract", "Actual client, pricing and payment terms"],
@@ -61,6 +61,7 @@ export function OrderDetailsPage({ entityType = "orders" }) {
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [printingDocument, setPrintingDocument] = useState(false);
   const { can } = useAuth();
   const isShipment = entityType === "shipments";
   const endpoint = `/${entityType}/${id}`;
@@ -133,6 +134,16 @@ export function OrderDetailsPage({ entityType = "orders" }) {
       await api.post(`${endpoint}/document-audit`, { document_type: preview[0], action_name: "downloaded" });
     } finally {
       setExportingPdf(false);
+    }
+  }
+
+  async function printDocument() {
+    setPrintingDocument(true);
+    try {
+      await printElement(document.querySelector(".print-document"), `${order.invoice_number}-${preview[1]}`);
+      await api.post(`${endpoint}/document-audit`, { document_type: preview[0], action_name: "printed" });
+    } finally {
+      setPrintingDocument(false);
     }
   }
 
@@ -283,7 +294,7 @@ export function OrderDetailsPage({ entityType = "orders" }) {
         ) : (
           <GenericDocumentPreview order={order} preview={preview} />
         )}
-        {canExportDocument && <div data-pdf-exclude className="mt-5 flex justify-end"><button onClick={exportDocumentPdf} className="btn-primary" disabled={exportingPdf}><Download size={18} /> {exportingPdf ? "Exporting..." : "Export PDF"}</button></div>}
+        {canExportDocument && <div data-pdf-exclude className="mt-5 flex flex-wrap justify-end gap-2"><button onClick={exportDocumentPdf} className="btn-secondary" disabled={exportingPdf}><Download size={18} /> {exportingPdf ? "Downloading..." : "Download PDF"}</button><button onClick={printDocument} className="btn-primary" disabled={printingDocument}><Printer size={18} /> {printingDocument ? "Preparing..." : "Print"}</button></div>}
       </Modal>
       <Modal open={gatePassOpen} title="Gate pass info" onClose={() => setGatePassOpen(false)} wide>
         <form onSubmit={saveGatePass}>

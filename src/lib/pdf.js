@@ -60,3 +60,54 @@ export async function downloadElementPdf(element, name) {
 
   pdf.save(`${fileSlug(name)}.pdf`);
 }
+
+export async function printElement(element, name) {
+  if (!element) throw new Error("The content to print could not be found.");
+
+  const frame = document.createElement("iframe");
+  frame.title = `Print ${name}`;
+  frame.style.position = "fixed";
+  frame.style.left = "-10000px";
+  frame.style.top = "0";
+  frame.style.width = "210mm";
+  frame.style.height = "297mm";
+  frame.style.border = "0";
+  document.body.appendChild(frame);
+
+  const printDocument = frame.contentDocument;
+  const styles = [...document.querySelectorAll('link[rel="stylesheet"], style')]
+    .map((node) => node.outerHTML)
+    .join("");
+
+  printDocument.open();
+  printDocument.write(`<!doctype html><html><head><title>${escapeHtml(name)}</title>${styles}<style>
+    @page { margin: 10mm; }
+    html, body { background: #fff !important; margin: 0; padding: 0; }
+    [data-pdf-exclude] { display: none !important; }
+    .overflow-x-auto { overflow: visible !important; }
+  </style></head><body>${element.outerHTML}</body></html>`);
+  printDocument.close();
+
+  await new Promise((resolve) => {
+    if (printDocument.readyState === "complete") resolve();
+    else frame.addEventListener("load", resolve, { once: true });
+  });
+
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const printWindow = frame.contentWindow;
+  printWindow.focus();
+  printWindow.print();
+
+  const cleanup = () => frame.remove();
+  printWindow.addEventListener("afterprint", cleanup, { once: true });
+  window.setTimeout(cleanup, 60_000);
+}
+
+function escapeHtml(value) {
+  return String(value || "Print")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}

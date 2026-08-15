@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Pencil, Plus } from "lucide-react";
+import { Building2, Pencil, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { Modal } from "../components/Modal";
+import { DeleteConfirmationModal } from "../components/DeleteConfirmationModal";
 import { ListToolbar, ToolbarSelect } from "../components/ListToolbar";
 import { api, messageFromError } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
@@ -22,6 +23,9 @@ export function PartiesPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(empty);
   const [error, setError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const { can } = useAuth();
 
   const load = () => api.get("/parties").then(({ data }) => setParties(data.parties));
@@ -52,6 +56,26 @@ export function PartiesPage() {
     } catch (requestError) { setError(messageFromError(requestError)); }
   }
 
+  function requestDelete(party) {
+    setDeleteTarget(party);
+    setDeleteError("");
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await api.delete(`/parties/${deleteTarget.id}`);
+      setDeleteTarget(null);
+      await load();
+    } catch (requestError) {
+      setDeleteError(messageFromError(requestError));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <>
       <PageHeader eyebrow="Master data" title="Business parties" description="Manage real clients, customs consignees and clearing agents." action={can("parties.create") && <button className="btn-primary" onClick={() => open()}><Plus size={18} /> Add party</button>} />
@@ -64,7 +88,10 @@ export function PartiesPage() {
             <div className="flex items-start gap-4">
               <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-forest-50 text-forest-700"><Building2 size={20} /></div>
               <div className="min-w-0 flex-1"><div className="text-xs font-bold uppercase tracking-wide text-forest-600">{types[party.party_type]}</div><h2 className="mt-1 truncate font-bold">{party.name}</h2><p className="mt-2 min-h-10 text-sm leading-5 text-slate-500">{[party.address_line_1, party.city, party.country].filter(Boolean).join(", ") || "No address added"}</p></div>
-              {can("parties.edit") && <button onClick={() => open(party)} className="rounded-lg p-2 hover:bg-slate-100"><Pencil size={16} /></button>}
+              <div className="flex shrink-0 gap-1">
+                {can("parties.edit") && <button type="button" aria-label={`Edit ${party.name}`} title="Edit party" onClick={() => open(party)} className="rounded-lg p-2 hover:bg-slate-100"><Pencil size={16} /></button>}
+                {can("parties.delete") && <button type="button" aria-label={`Delete ${party.name}`} title="Delete party" onClick={() => requestDelete(party)} className="rounded-lg p-2 text-red-600 hover:bg-red-50 hover:text-red-700"><Trash2 size={16} /></button>}
+              </div>
             </div>
             <div className="mt-5 border-t pt-4 text-xs text-slate-500">{party.phone || party.email || "No contact information"}</div>
           </article>
@@ -83,6 +110,18 @@ export function PartiesPage() {
           <div className="mt-7 flex justify-end gap-3"><button type="button" className="btn-secondary" onClick={() => setModalOpen(false)}>Cancel</button><button className="btn-primary">Save party</button></div>
         </form>
       </Modal>
+      <DeleteConfirmationModal
+        open={Boolean(deleteTarget)}
+        title="Delete business party"
+        recordName={deleteTarget?.name || "this business party"}
+        description="The party will no longer appear in Business Parties or in selection lists for new sales contracts and shipments. Existing records that reference this party will be retained."
+        affected={["Business Parties listing", "Party selection lists for new records"]}
+        retained={["Existing sales contracts", "Shipments", "Ledger and payment history", "Documents"]}
+        error={deleteError}
+        deleting={deleting}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+      />
     </>
   );
 }
