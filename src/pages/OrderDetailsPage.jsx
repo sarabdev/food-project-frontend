@@ -409,6 +409,7 @@ function BLInstructionsDocument({ order, totals }) {
   const commercialCartons = commercialItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   const sampleCartons = sampleItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   const containerGroups = containerItemGroups(order.items);
+  const customsReference = shipmentCustomsReference(order);
 
   return (
     <div className="print-document bl-sheet bg-white text-[#202020]">
@@ -468,8 +469,8 @@ function BLInstructionsDocument({ order, totals }) {
               <span>HS CODE: {item.hs_code || "-"}</span>
             </div>
           ))}
-          <div className="bl-reference">
-            <span><strong>{shipmentCustomsReference(order).documentLabel}</strong>&nbsp;&nbsp;{shipmentCustomsReference(order).value || "-"}</span>
+          <div className={`bl-reference${customsReference.value ? "" : " bl-reference-single"}`}>
+            {customsReference.value && <span><strong>{customsReference.documentLabel}</strong>&nbsp;&nbsp;{customsReference.value}</span>}
             <span><strong>Export Reference:</strong>&nbsp;&nbsp;{order.invoice_number}</span>
           </div>
           <div className="bl-free-days">
@@ -625,6 +626,7 @@ function GatePassLine({ item, index, isSample = false }) {
 
 function CommercialInvoiceDocument({ order, documentType }) {
   const isCustoms = documentType === "customs_commercial_invoice";
+  const customsReference = shipmentCustomsReference(order);
   const consignee = isCustoms ? {
     name: order.customs_consignee_name,
     address: order.customs_consignee_address,
@@ -650,12 +652,13 @@ function CommercialInvoiceDocument({ order, documentType }) {
   return (
     <div className="print-document commercial-invoice-sheet bg-white text-[#202020]">
       <header className="invoice-brand"><img src="/brand/za-header.png" alt="Z.A Food Industries" /></header>
-      <section className="invoice-top">
+      <section className={`invoice-top${isCustoms && customsReference.value ? " invoice-top-customs" : ""}`}>
         <div className="invoice-applicant">
           <strong>{isCustoms ? "Consignee" : "Applicant"}</strong>
           <span>{consignee.name || "-"}</span>
           <span>{formatAddress(consignee.address, consignee.city, consignee.country)}</span>
         </div>
+        {isCustoms && customsReference.value && <div className="invoice-customs-reference"><strong>{customsReference.documentLabel}</strong> {customsReference.value}</div>}
         <div className="invoice-title-block">
           <h1>COMMERCIAL INVOICE</h1>
           <InfoRows rows={[
@@ -808,6 +811,7 @@ function invoiceAdjustmentLabel(type, description) {
 function PackingWeightListDocument({ order, documentType }) {
   const useCustomsConsignee = documentType === "customs_packing_list";
   const isClientPackingList = documentType === "client_packing_list";
+  const customsReference = shipmentCustomsReference(order);
   const consignee = useCustomsConsignee ? {
     name: order.customs_consignee_name,
     address: order.customs_consignee_address,
@@ -831,13 +835,13 @@ function PackingWeightListDocument({ order, documentType }) {
   return (
     <div className="print-document packing-sheet bg-white text-[#202020]">
       <header className="packing-brand"><img src="/brand/za-header.png" alt="Z.A Food Industries" /></header>
-      <section className="packing-top">
+      <section className={`packing-top${customsReference.value ? "" : " packing-top-no-reference"}`}>
         <div className="packing-consignee">
           <strong>{isClientPackingList ? "Applicant" : "CONSIGNEE"}</strong>
           <span>{consignee.name || "-"}</span>
           <span>{formatAddress(consignee.address, consignee.city, consignee.country)}</span>
         </div>
-        <div className="packing-gd"><strong>{shipmentCustomsReference(order).documentLabel}</strong> {shipmentCustomsReference(order).value || "-"}</div>
+        {customsReference.value && <div className="packing-gd"><strong>{customsReference.documentLabel}</strong> {customsReference.value}</div>}
         <div className="packing-title-block">
           <h1>{isClientPackingList ? "PACKING LIST" : "PACKING / WEIGHT LIST"}</h1>
           <InfoRows rows={[
@@ -1010,6 +1014,7 @@ function GenericDocumentPreview({ order, preview }) {
 
 function SalesContractDocument({ order }) {
   const commercialItems = order.items.filter((item) => !item.is_sample);
+  const useDenseLayout = commercialItems.length > 7;
   const commercialTotals = {
     packages: commercialItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
     net: commercialItems.reduce((sum, item) => sum + Number(item.total_net_weight || 0), 0),
@@ -1018,7 +1023,7 @@ function SalesContractDocument({ order }) {
   };
   const advanceAmount = Number(commercialTotals.client) * (Number(order.advance_percentage) / 100);
   return (
-    <div className="print-document sale-contract-sheet bg-white text-[#202020]">
+    <div className={`print-document sale-contract-sheet bg-white text-[#202020]${useDenseLayout ? " sale-contract-dense" : ""}`}>
       <header className="sale-brand"><img src="/brand/za-header.png" alt="Z.A Food Industries" /></header>
       <section className="sale-company">
         <strong>Your Trade Partner In Business</strong>

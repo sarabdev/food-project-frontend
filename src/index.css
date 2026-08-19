@@ -108,13 +108,19 @@
 
 .contract-value span,
 .sale-panel-title {
-  background: #575757;
-  color: #fff;
-  font-size: 8px;
-  font-weight: 800;
+  background: transparent;
+  color: #000;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 9px;
+  font-weight: 900;
   line-height: 1;
   padding: 3px 5px;
+  text-shadow: none;
   text-transform: uppercase;
+}
+
+.contract-value span {
+  border: 1px solid #555;
 }
 
 .contract-value strong {
@@ -206,10 +212,13 @@
 }
 
 .sale-product-table thead th {
-  background: #5a5a5a;
-  border-right: 1px solid #777;
-  color: #fff;
-  font-weight: 800;
+  background: transparent;
+  border: 1px solid #555;
+  color: #000;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 8px;
+  font-weight: 900;
+  text-shadow: none;
 }
 
 .sale-product-table .col-serial { width: 2.8%; }
@@ -339,6 +348,127 @@
   text-align: center;
 }
 
+/* Keep contracts with 8-10 products on one A4 page without shrinking shorter contracts. */
+.sale-contract-dense {
+  padding-bottom: 5mm;
+  padding-top: 5mm;
+}
+
+.sale-contract-dense .sale-brand img {
+  max-height: 23mm;
+  object-fit: contain;
+}
+
+.sale-contract-dense .sale-company {
+  font-size: 7.5px;
+  line-height: 1.05;
+  margin-top: 1px;
+  padding-top: 1px;
+}
+
+.sale-contract-dense .sale-company strong {
+  font-size: 9px;
+}
+
+.sale-contract-dense .sale-title {
+  font-size: 15px;
+  margin-bottom: 2px;
+  margin-top: 2px;
+  padding-bottom: 2px;
+  padding-top: 2px;
+}
+
+.sale-contract-dense .sale-top-grid {
+  margin-bottom: 2px;
+}
+
+.sale-contract-dense .sale-value-stack {
+  gap: 2px;
+}
+
+.sale-contract-dense .contract-value span {
+  padding-bottom: 2px;
+  padding-top: 2px;
+}
+
+.sale-contract-dense .contract-value strong {
+  font-size: 11px;
+  padding-bottom: 3px;
+  padding-top: 3px;
+}
+
+.sale-contract-dense .sale-detail-grid {
+  gap: 3mm;
+  margin-top: 2px;
+}
+
+.sale-contract-dense .sale-panel th,
+.sale-contract-dense .sale-panel td,
+.sale-contract-dense .sale-invoice-box th,
+.sale-contract-dense .sale-invoice-box td {
+  font-size: 7px;
+  padding: 1px 3px;
+}
+
+.sale-contract-dense .sale-product-wrap {
+  margin-top: 2mm;
+}
+
+.sale-contract-dense .sale-product-table td {
+  font-size: 6.5px;
+  line-height: 1;
+  padding: 1px;
+}
+
+.sale-contract-dense .sale-product-table tbody tr {
+  min-height: 10mm;
+}
+
+.sale-contract-dense .product-image-cell img,
+.sale-contract-dense .product-image-empty {
+  height: 10mm;
+  max-width: 15mm;
+}
+
+.sale-contract-dense .boxed-weight {
+  min-width: 10mm;
+  padding-bottom: 0;
+  padding-top: 0;
+}
+
+.sale-contract-dense .sale-lower-grid {
+  gap: 14mm;
+  margin-top: 2mm;
+}
+
+.sale-contract-dense .sale-panel-compact {
+  margin-top: 2mm;
+}
+
+.sale-contract-dense .sale-panel-compact th,
+.sale-contract-dense .sale-panel-compact td {
+  font-size: 6px;
+  line-height: 1;
+  padding: 1px 2px;
+}
+
+.sale-contract-dense .sale-signature {
+  margin-top: 2mm;
+}
+
+.sale-contract-dense .sale-signature img {
+  height: 11mm;
+}
+
+.sale-contract-dense .sale-total-box {
+  margin-bottom: 2mm;
+  margin-top: 3mm;
+}
+
+.sale-contract-dense .sale-note {
+  font-size: 5.5px;
+}
+
 .packing-sheet {
   aspect-ratio: 210 / 297;
   box-sizing: border-box;
@@ -364,6 +494,10 @@
   gap: 6mm;
   margin-top: 3px;
   padding-top: 4px;
+}
+
+.packing-top-no-reference {
+  grid-template-columns: 1fr 58mm;
 }
 
 .packing-consignee,
@@ -637,8 +771,13 @@
   padding-top: 6mm;
 }
 
+.invoice-top-customs {
+  grid-template-columns: 1fr 26mm 72mm;
+}
+
 .invoice-applicant,
-.invoice-title-block {
+.invoice-title-block,
+.invoice-customs-reference {
   font-size: 8px;
   line-height: 1.2;
 }
@@ -651,6 +790,11 @@
 
 .invoice-applicant strong {
   text-transform: none;
+}
+
+.invoice-customs-reference {
+  padding-top: 10mm;
+  text-align: center;
 }
 
 .invoice-title-block h1 {
@@ -1287,6 +1431,10 @@
   gap: 1mm;
   grid-template-columns: 1fr 1fr;
   margin-top: 5mm;
+}
+
+.bl-reference-single {
+  grid-template-columns: 1fr;
 }
 
 .bl-transit-note {
